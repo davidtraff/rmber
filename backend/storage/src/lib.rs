@@ -6,8 +6,8 @@ pub use packet::*;
 
 #[derive(Debug)]
 pub struct Error {
-    message: String,
-    inner: Option<Box<dyn std::error::Error>>,
+    pub message: String,
+    pub inner: Option<Box<dyn std::error::Error>>,
 }
 
 impl Error {

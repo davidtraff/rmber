@@ -1,6 +1,7 @@
 use super::Error;
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use std::io::{Read, Write};
+use tokio_byteorder::{BigEndian, AsyncReadBytesExt, AsyncWriteBytesExt};
+use tokio::io::{AsyncRead, AsyncWrite};
+use std::marker::Unpin;
 
 #[derive(Debug, PartialEq)]
 pub enum Value {
@@ -29,82 +30,82 @@ impl Value {
         todo!();
     }
 
-    pub fn write_to<TTarget>(&self, target: &mut TTarget) -> Result<(), Error>
+    pub async fn write_to<TTarget>(&self, target: &mut TTarget) -> Result<(), Error>
     where
-        TTarget: Write,
+        TTarget: AsyncWrite + Unpin,
     {
-        target.write_u8(self.into())?;
+        target.write_u8(self.into()).await?;
 
         match self {
             Value::Boolean(_) => panic!(),
             Value::Blob(v) => {
-                target.write_u32::<BigEndian>(v.len() as u32)?;
-                target.write_all(&v)?
+                target.write_u32::<BigEndian>(v.len() as u32).await?;
+                tokio::io::AsyncWriteExt::write_all(target, &v).await?;
             },
             Value::String(v) => {
-                target.write_u32::<BigEndian>(v.len() as u32)?;
-                target.write_all(v.as_bytes())?
+                target.write_u32::<BigEndian>(v.len() as u32).await?;
+                tokio::io::AsyncWriteExt::write_all(target, v.as_bytes()).await?;
             },
-            Value::U8(v) => target.write_u8(*v)?,
-            Value::I8(v) => target.write_i8(*v)?,
+            Value::U8(v) => target.write_u8(*v).await?,
+            Value::I8(v) => target.write_i8(*v).await?,
 
-            Value::U16(v) => target.write_u16::<BigEndian>(*v)?,
-            Value::I16(v) => target.write_i16::<BigEndian>(*v)?,
+            Value::U16(v) => target.write_u16::<BigEndian>(*v).await?,
+            Value::I16(v) => target.write_i16::<BigEndian>(*v).await?,
 
-            Value::U32(v) => target.write_u32::<BigEndian>(*v)?,
-            Value::I32(v) => target.write_i32::<BigEndian>(*v)?,
+            Value::U32(v) => target.write_u32::<BigEndian>(*v).await?,
+            Value::I32(v) => target.write_i32::<BigEndian>(*v).await?,
 
-            Value::U64(v) => target.write_u64::<BigEndian>(*v)?,
-            Value::I64(v) => target.write_i64::<BigEndian>(*v)?,
+            Value::U64(v) => target.write_u64::<BigEndian>(*v).await?,
+            Value::I64(v) => target.write_i64::<BigEndian>(*v).await?,
 
-            Value::F32(v) => target.write_f32::<BigEndian>(*v)?,
-            Value::F64(v) => target.write_f64::<BigEndian>(*v)?,
+            Value::F32(v) => target.write_f32::<BigEndian>(*v).await?,
+            Value::F64(v) => target.write_f64::<BigEndian>(*v).await?,
         };
 
         Ok(())
     }
 
-    pub fn read_from<TSource>(source: &mut TSource) -> Result<Self, Error>
+    pub async fn read_from<TSource>(source: &mut TSource) -> Result<Self, Error>
     where
-        TSource: Read,
+        TSource: AsyncRead + Unpin,
     {
-        let value_type = source.read_u8()?;
+        let value_type = source.read_u8().await?;
 
         let result = match value_type {
             // Boolean
             1 => panic!(),
             // Blob
             2 => {
-                let len = source.read_u32::<BigEndian>()?;
+                let len = source.read_u32::<BigEndian>().await?;
                 let mut data = vec![0u8; len as usize];
-                source.read_exact(&mut data)?;
+                tokio::io::AsyncReadExt::read_exact(source, &mut data).await?;
 
                 Value::Blob(data)
             },
             // String
             3 => {
-                let len = source.read_u32::<BigEndian>()?;
+                let len = source.read_u32::<BigEndian>().await?;
                 let mut data = vec![0u8; len as usize];
-                source.read_exact(&mut data)?;
+                tokio::io::AsyncReadExt::read_exact(source, &mut data).await?;
                 let string = String::from_utf8(data)?;
 
                 Value::String(string)
             },
             // 8
-            4 => Value::U8(source.read_u8()?),
-            5 => Value::I8(source.read_i8()?),
+            4 => Value::U8(source.read_u8().await?),
+            5 => Value::I8(source.read_i8().await?),
             // 16
-            6 => Value::U16(source.read_u16::<BigEndian>()?),
-            7 => Value::I16(source.read_i16::<BigEndian>()?),
+            6 => Value::U16(source.read_u16::<BigEndian>().await?),
+            7 => Value::I16(source.read_i16::<BigEndian>().await?),
             // 32
-            8 => Value::U32(source.read_u32::<BigEndian>()?),
-            9 => Value::I32(source.read_i32::<BigEndian>()?),
+            8 => Value::U32(source.read_u32::<BigEndian>().await?),
+            9 => Value::I32(source.read_i32::<BigEndian>().await?),
             // 64
-            10 => Value::U64(source.read_u64::<BigEndian>()?),
-            11 => Value::I64(source.read_i64::<BigEndian>()?),
+            10 => Value::U64(source.read_u64::<BigEndian>().await?),
+            11 => Value::I64(source.read_i64::<BigEndian>().await?),
             // Floats
-            12 => Value::F32(source.read_f32::<BigEndian>()?),
-            13 => Value::F64(source.read_f64::<BigEndian>()?),
+            12 => Value::F32(source.read_f32::<BigEndian>().await?),
+            13 => Value::F64(source.read_f64::<BigEndian>().await?),
             _ => unimplemented!(),
         };
 
@@ -164,50 +165,50 @@ mod tests {
         assert_eq!(u8::from(Value::F64(0f64)), 13);
     }
 
-    #[test]
-    fn serializes_8_correctly() {
+    #[tokio::test]
+    async fn serializes_8_correctly() {
         let mut cursor = std::io::Cursor::new(vec![0u8; 100]);
         let value = Value::U8(u8::MAX);
-        value.write_to(&mut cursor).unwrap();
+        value.write_to(&mut cursor).await.unwrap();
         assert_eq!(&cursor.get_ref()[0..2], &[4, 255]);
 
         let mut cursor = std::io::Cursor::new(vec![0u8; 100]);
         let value = Value::I8(i8::MAX);
-        value.write_to(&mut cursor).unwrap();
+        value.write_to(&mut cursor).await.unwrap();
         assert_eq!(&cursor.get_ref()[0..2], &[5, 127]);
     }
 
-    #[test]
-    fn serializes_16_correctly() {
+    #[tokio::test]
+    async fn serializes_16_correctly() {
         let mut cursor = std::io::Cursor::new(vec![0u8; 100]);
         let value = Value::U16(u16::MAX);
-        value.write_to(&mut cursor).unwrap();
+        value.write_to(&mut cursor).await.unwrap();
         assert_eq!(&cursor.get_ref()[0..3], &[6, 255, 255]);
 
         let mut cursor = std::io::Cursor::new(vec![0u8; 100]);
         let value = Value::I16(i16::MAX);
-        value.write_to(&mut cursor).unwrap();
+        value.write_to(&mut cursor).await.unwrap();
         assert_eq!(&cursor.get_ref()[0..3], &[7, 127, 255]);
     }
 
-    #[test]
-    fn serializes_32_correctly() {
+    #[tokio::test]
+    async fn serializes_32_correctly() {
         let mut cursor = std::io::Cursor::new(vec![0u8; 100]);
         let value = Value::U32(u32::MAX);
-        value.write_to(&mut cursor).unwrap();
+        value.write_to(&mut cursor).await.unwrap();
         assert_eq!(&cursor.get_ref()[0..5], &[8, 255, 255, 255, 255]);
 
         let mut cursor = std::io::Cursor::new(vec![0u8; 100]);
         let value = Value::I32(i32::MAX);
-        value.write_to(&mut cursor).unwrap();
+        value.write_to(&mut cursor).await.unwrap();
         assert_eq!(&cursor.get_ref()[0..5], &[9, 127, 255, 255, 255]);
     }
 
-    #[test]
-    fn serializes_64_correctly() {
+    #[tokio::test]
+    async fn serializes_64_correctly() {
         let mut cursor = std::io::Cursor::new(vec![0u8; 100]);
         let value = Value::U64(u64::MAX);
-        value.write_to(&mut cursor).unwrap();
+        value.write_to(&mut cursor).await.unwrap();
         assert_eq!(
             &cursor.get_ref()[0..9],
             &[10, 255, 255, 255, 255, 255, 255, 255, 255]
@@ -215,23 +216,23 @@ mod tests {
 
         let mut cursor = std::io::Cursor::new(vec![0u8; 100]);
         let value = Value::I64(i64::MAX);
-        value.write_to(&mut cursor).unwrap();
+        value.write_to(&mut cursor).await.unwrap();
         assert_eq!(
             &cursor.get_ref()[0..9],
             &[11, 127, 255, 255, 255, 255, 255, 255, 255]
         );
     }
 
-    #[test]
-    fn serializes_f_correctly() {
+    #[tokio::test]
+    async fn serializes_f_correctly() {
         let mut cursor = std::io::Cursor::new(vec![0u8; 100]);
         let value = Value::F32(f32::MAX);
-        value.write_to(&mut cursor).unwrap();
+        value.write_to(&mut cursor).await.unwrap();
         assert_eq!(&cursor.get_ref()[0..5], &[12, 127, 127, 255, 255]);
 
         let mut cursor = std::io::Cursor::new(vec![0u8; 100]);
         let value = Value::F64(f64::MAX);
-        value.write_to(&mut cursor).unwrap();
+        value.write_to(&mut cursor).await.unwrap();
         assert_eq!(
             &cursor.get_ref()[0..9],
             &[13, 127, 239, 255, 255, 255, 255, 255, 255]
