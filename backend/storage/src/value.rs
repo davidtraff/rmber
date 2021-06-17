@@ -1,7 +1,7 @@
 use super::Error;
 use tokio_byteorder::{BigEndian, AsyncReadBytesExt, AsyncWriteBytesExt};
 use tokio::io::{AsyncRead, AsyncWrite};
-use std::marker::Unpin;
+use std::{io::ErrorKind, marker::Unpin};
 
 #[derive(Debug, PartialEq)]
 pub enum Value {
@@ -87,7 +87,10 @@ impl Value {
                 let len = source.read_u32::<BigEndian>().await?;
                 let mut data = vec![0u8; len as usize];
                 tokio::io::AsyncReadExt::read_exact(source, &mut data).await?;
-                let string = String::from_utf8(data)?;
+                let string = match String::from_utf8(data) {
+                    Ok(string) => string,
+                    Err(e) => return Err(Error::new(ErrorKind::InvalidData, e)),
+                };
 
                 Value::String(string)
             },

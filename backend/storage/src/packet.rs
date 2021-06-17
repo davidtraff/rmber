@@ -1,7 +1,8 @@
-use super::{Error, Key, Value};
-use tokio_byteorder::{AsyncReadBytesExt, AsyncWriteBytesExt};
-use tokio::io::{AsyncRead, AsyncWrite};
+use super::{Key, Value};
+use std::io::{Error, ErrorKind};
 use std::marker::Unpin;
+use tokio::io::{AsyncRead, AsyncWrite};
+use tokio_byteorder::{AsyncReadBytesExt, AsyncWriteBytesExt};
 
 #[derive(Debug, PartialEq)]
 pub enum Packet<TKey>
@@ -9,7 +10,10 @@ where
     TKey: Key,
 {
     /// Subscribe to a point.
-    Subscribe { token: TKey, id: TKey },
+    Subscribe {
+        token: TKey,
+        id: TKey,
+    },
     /// Update a point.
     Update {
         token: TKey,
@@ -17,9 +21,18 @@ where
         new_value: Value,
     },
     /// List points.
-    List { token: TKey, id: TKey },
+    List {
+        token: TKey,
+        id: TKey,
+    },
     /// Error. Will always be string.
-    Error { value: Value }
+    Error {
+        token: TKey,
+        value: Value,
+    },
+    Ok {
+        token: TKey,
+    },
 }
 
 impl<TKey: Key> Packet<TKey> {
@@ -46,14 +59,18 @@ impl<TKey: Key> Packet<TKey> {
             Packet::List { token, id } => {
                 write_key(target, token).await?;
                 write_key(target, id).await?;
-            },
-            Packet::Error { value } => {
+            }
+            Packet::Error { token, value } => {
                 if let Value::String(_) = value {
+                    write_key(target, token).await?;
                     value.write_to(target).await?;
                 } else {
                     unreachable!();
                 }
-            },
+            }
+            Packet::Ok { token } => {
+                write_key(target, token).await?;
+            }
         };
 
         Ok(())
@@ -92,7 +109,18 @@ impl<TKey: Key> Packet<TKey> {
 
                 Ok(Packet::List { token, id })
             }
-            _ => Err(Error::new("Invalid packet-type")),
+            4 => {
+                let token = read_key(source).await?;
+                let value = Value::read_from(source).await?;
+
+                Ok(Packet::Error { token, value })
+            }
+            5 => {
+                let token = read_key(source).await?;
+
+                Ok(Packet::Ok { token })
+            },
+            _ => Err(Error::new(ErrorKind::InvalidData, "Invalid packet-type")),
         }
     }
 }
@@ -143,7 +171,8 @@ impl<T: Key> From<&Packet<T>> for u8 {
                 new_value: _,
             } => 2,
             Packet::List { token: _, id: _ } => 3,
-            Packet::Error { value: _ } => 4,
+            Packet::Error { token: _, value: _ } => 4,
+            Packet::Ok { token: _ } => 5,
         }
     }
 }
@@ -219,7 +248,7 @@ mod tests {
                 116, //  |
                 105, //  |
                 100, //  |
-                // ______|
+                     // ______|
             ]
         );
     }
@@ -270,7 +299,7 @@ mod tests {
                 0, //  |
                 4, //  |
                 210, //|
-                // ____|
+                   // ____|
             ]
         );
     }
@@ -279,7 +308,7 @@ mod tests {
     async fn deserialize_subscribe_packet() {
         let data = vec![
             1u8, // Packet-id,
-            5, // token-length
+            5,   // token-length
             // _______
             116, //  |
             111, //  |
@@ -296,22 +325,25 @@ mod tests {
             116, //  |
             105, //  |
             100, //  |
-            // ______|
+                 // ______|
         ];
         let mut data = std::io::Cursor::new(data);
         let packet = Packet::<StringKey>::read_from(&mut data).await.unwrap();
 
-        assert_eq!(packet, Packet::<StringKey>::Subscribe {
-            token: StringKey::new("token").unwrap(),
-            id: StringKey::new("pointid").unwrap(),
-        });
+        assert_eq!(
+            packet,
+            Packet::<StringKey>::Subscribe {
+                token: StringKey::new("token").unwrap(),
+                id: StringKey::new("pointid").unwrap(),
+            }
+        );
     }
 
     #[tokio::test]
     async fn deserialize_update_packet() {
         let data = vec![
             2u8, // Packet-id,
-            5, // token-length
+            5,   // token-length
             // _______
             116, //  |
             111, //  |
@@ -339,15 +371,18 @@ mod tests {
             0, //  |
             4, //  |
             210, //|
-            // ____|
+               // ____|
         ];
         let mut data = std::io::Cursor::new(data);
         let packet = Packet::<StringKey>::read_from(&mut data).await.unwrap();
 
-        assert_eq!(packet, Packet::<StringKey>::Update {
-            token: StringKey::new("token").unwrap(),
-            id: StringKey::new("pointid").unwrap(),
-            new_value: Value::I64(1234),
-        });
+        assert_eq!(
+            packet,
+            Packet::<StringKey>::Update {
+                token: StringKey::new("token").unwrap(),
+                id: StringKey::new("pointid").unwrap(),
+                new_value: Value::I64(1234),
+            }
+        );
     }
 }

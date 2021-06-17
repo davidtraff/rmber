@@ -1,42 +1,13 @@
 mod value;
 mod packet;
 
+use std::convert::TryInto;
+
+use std::hash::Hash;
+use std::io::{Error, ErrorKind};
+use rand::{Fill, Rng};
 pub use value::*;
 pub use packet::*;
-
-#[derive(Debug)]
-pub struct Error {
-    pub message: String,
-    pub inner: Option<Box<dyn std::error::Error>>,
-}
-
-impl Error {
-    pub fn new(message: &str) -> Self {
-        Error {
-            message: String::from(message),
-            inner: None,
-        }
-    }
-
-    pub fn new_with_inner(message: &str, inner: Box<dyn std::error::Error>) -> Self {
-        Error {
-            message: String::from(message),
-            inner: Some(inner),
-        }
-    }
-}
-
-impl From<std::io::Error> for Error {
-    fn from(e: std::io::Error) -> Self {
-        Error::new_with_inner("IO-error", Box::new(e))
-    }
-}
-
-impl From<std::string::FromUtf8Error> for Error {
-    fn from(e: std::string::FromUtf8Error) -> Self {
-        Error::new_with_inner("UTF8-error", Box::new(e))
-    }
-}
 
 pub trait Key: Sized {
     fn from_slice(key: &[u8]) -> Result<Self, Error>;
@@ -49,7 +20,7 @@ pub struct StringKey(String);
 impl StringKey {
     pub fn new(value: &str) -> Result<Self, Error> {
         if !value.is_ascii() {
-            return Err(Error::new("Invalid key. Only ascii-characters allowed"));
+            return Err(Error::new(ErrorKind::InvalidData, "Invalid key. Only ascii-characters allowed"));
         }
 
         Ok(StringKey(value.to_lowercase()))
@@ -60,15 +31,64 @@ impl Key for StringKey {
     fn from_slice(key: &[u8]) -> Result<Self, Error> {
         match std::str::from_utf8(key) {
             Ok(key) => StringKey::new(key),
-            Err(e) => Err(Error::new_with_inner(
-                "Invalid key. Only ascii-characters allowed",
-                Box::new(e),
+            Err(e) => Err(Error::new(
+                ErrorKind::InvalidInput,
+                e,
             )),
         }
     }
 
     fn as_slice(&self) -> &[u8] {
         self.0.as_bytes()
+    }
+}
+
+impl Hash for StringKey {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RawKey<const LEN: usize>([u8; LEN]);
+
+impl<const LEN: usize> RawKey<LEN> {
+    pub fn new_random() -> Result<Self, Error> {
+        let mut rng = rand::thread_rng();
+        let mut key = RawKey([0u8; LEN]);
+
+        match key.try_fill(&mut rng) {
+            Ok(_) => Ok(key),
+            Err(e) => Err(Error::new(ErrorKind::Other, e)),
+        }
+    }
+}
+
+impl<const LEN: usize> Fill for RawKey<LEN> {
+    fn try_fill<R: Rng + ?Sized>(&mut self, rng: &mut R) -> Result<(), rand::Error> {
+        rng.try_fill_bytes(&mut self.0) 
+    }
+}
+
+impl<const LEN: usize> Key for RawKey<LEN> {
+    fn from_slice(key: &[u8]) -> Result<Self, Error> {
+        if key.len() != LEN {
+            return Err(Error::new(ErrorKind::InvalidInput, format!("Invalid key length. Expected {} bytes but got {}", LEN, key.len())));
+        }
+
+        let clone = key.clone();
+
+        Ok(RawKey(clone.try_into().unwrap()))
+    }
+
+    fn as_slice(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl<const LEN: usize> std::fmt::Display for RawKey<LEN> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}, len={})", hex::encode(self.0), LEN)
     }
 }
 
