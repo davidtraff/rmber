@@ -3,14 +3,14 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::io::{Error, ErrorKind};
 use std::{net::SocketAddr, sync::Arc};
-use storage::{Packet, StringKey};
+use protocol::{Packet, StringKey};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::{
     net::TcpStream,
     sync::{mpsc::UnboundedSender, Mutex}
 };
 
-pub type ConnectionId = storage::RawKey<8>;
+pub type ConnectionId = protocol::RawKey<8>;
 
 #[derive(Debug)]
 pub struct Connection {

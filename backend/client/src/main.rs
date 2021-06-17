@@ -1,5 +1,5 @@
 use std::{collections::HashMap, time::{Duration, SystemTime, UNIX_EPOCH}};
-use storage::{Packet, StringKey};
+use protocol::{Packet, StringKey};
 use tokio::{net::TcpStream, time::sleep};
 
 #[tokio::main]

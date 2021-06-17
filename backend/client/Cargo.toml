@@ -7,4 +7,4 @@ edition = "2018"
 
 [dependencies]
 tokio = { version = "1.6.0", features = ["full"] }
-storage = { path = "../storage" }
+protocol = { path = "../protocol" }

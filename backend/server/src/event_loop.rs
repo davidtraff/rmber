@@ -1,5 +1,5 @@
 use std::io::{Error, ErrorKind};
-use storage::{Packet, StringKey, Value};
+use protocol::{Packet, StringKey, Value};
 use tokio::{net::TcpStream, sync::mpsc::unbounded_channel};
 use tokio_stream::{
     wrappers::{TcpListenerStream, UnboundedReceiverStream},
@@ -67,11 +67,11 @@ pub async fn poll(listener: &mut TcpListenerStream, connections: &mut Vec<Connec
                         }.await.unwrap();
                     }
                     Packet::Update {
-                        token,
-                        id,
-                        new_value,
+                        token: _,
+                        id: _,
+                        new_value: _,
                     } => todo!(),
-                    Packet::List { token, id } => todo!(),
+                    Packet::List { token: _, id: _ } => todo!(),
                     Packet::Error { token: _, value: _ } => {
                         // In this case we emit a disconnect.
                         tx.send((
