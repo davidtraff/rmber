@@ -16,7 +16,7 @@ pub fn parse(input: &str) -> Result<Vec<Namespace>, Error<Rule>> {
 
     let mut namespaces = HashMap::new();
     for namespace in result.into_iter() {
-        traverse_tree(&mut namespaces, namespace)?;
+        traverse_tree(&mut namespaces, None, namespace)?;
     }
 
     let namespaces = namespaces
@@ -27,7 +27,7 @@ pub fn parse(input: &str) -> Result<Vec<Namespace>, Error<Rule>> {
     Ok(namespaces)
 }
 
-fn traverse_tree(namespaces: &mut HashMap<String, Vec<Point>>, pair: Pair<Rule>) -> Result<(), Error<Rule>> {
+fn traverse_tree(namespaces: &mut HashMap<String, Vec<Point>>, parent: Option<String>, pair: Pair<Rule>) -> Result<(), Error<Rule>> {
     let contents = pair.into_inner();
     let mut name = None;
     let mut points: HashSet<Point> = HashSet::new();
@@ -35,10 +35,14 @@ fn traverse_tree(namespaces: &mut HashMap<String, Vec<Point>>, pair: Pair<Rule>)
     for inner in contents {
         match inner.as_rule() {
             Rule::namespace => {
-                traverse_tree(namespaces, inner)?;
+                traverse_tree(namespaces, name.clone(), inner)?;
             }
             Rule::identifier => {
-                name = Some(String::from(inner.as_str()));
+                if let Some(parent) = &parent {
+                    name = Some(format!("{}.{}", parent, inner.as_str()));
+                } else {
+                    name = Some(String::from(inner.as_str()));
+                }
             }
             Rule::point => {
                 let mut point = convert_point(inner)?;

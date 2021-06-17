@@ -52,22 +52,66 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_works() {
+    fn nested_test() {
         let data = String::from("
             first {
                 - asd: u8 | string
                 - asd: blob
                 - asd1: u8 | string
-                - asd2: u8 | string
+                - asd2: u8 | u16
             }
 
             second {
-                - asd: u8 | string
+                nested {
+                    - asd: u8 | string
+                }
             }
         ");
 
         let result = parser::parse(&data).unwrap();
 
-        assert_eq!(2, result.len());
+        assert_eq!(3, result.len());
+
+        let first = check_for_ns(&result, "first", 3);
+        let asd = check_for_point(first, "asd", 3);
+        check_for_point_type(asd, PointType::U8);
+        check_for_point_type(asd, PointType::String);
+        check_for_point_type(asd, PointType::Blob);
+
+        let asd1 = check_for_point(first, "asd1", 2);
+        check_for_point_type(asd1, PointType::U8);
+        check_for_point_type(asd1, PointType::String);
+
+        let asd2 = check_for_point(first, "asd2", 2);
+        check_for_point_type(asd2, PointType::U8);
+        check_for_point_type(asd2, PointType::U16);
+
+        
+        check_for_ns(&result, "second", 0);
+
+        let nested = check_for_ns(&result, "second.nested", 1);
+        let asd = check_for_point(nested, "asd", 2);
+        check_for_point_type(asd, PointType::U8);
+        check_for_point_type(asd, PointType::String);
+    }
+
+    fn check_for_ns<'a>(ns: &'a Vec<Namespace>, name: &str, expected_count: usize) -> &'a Namespace {
+        let item = ns.iter().find(|x| x.name.eq(name)).expect(name);
+
+        assert_eq!(item.points.len(), expected_count);
+
+        item
+    }
+
+    fn check_for_point<'a>(ns: &'a Namespace, name: &str, expected_count: usize) -> &'a Point {
+        let point = ns.points.iter().find(|x| x.name.eq(name)).expect(name);
+
+        assert_eq!(point.types.len(), expected_count);
+
+        point
+    }
+
+    fn check_for_point_type(point: &Point, pt: PointType) {
+        point.types.iter().find(|x| (*x).eq(&pt)).expect(&format!("{:?} {:?}", point.name, pt));
     }
 }
