@@ -8,7 +8,6 @@ async fn main() {
     let mut values = vec![];
     loop {
         let packet = Packet::Subscribe {
-            token: StringKey::new("client").unwrap(),
             id: StringKey::new("test-point").unwrap(),
         };
 

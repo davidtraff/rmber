@@ -11,28 +11,22 @@ where
 {
     /// Subscribe to a point.
     Subscribe {
-        token: TKey,
         id: TKey,
     },
     /// Update a point.
     Update {
-        token: TKey,
         id: TKey,
         new_value: Value,
     },
     /// List points.
     List {
-        token: TKey,
         id: TKey,
     },
     /// Error. Will always be string.
     Error {
-        token: TKey,
         value: Value,
     },
-    Ok {
-        token: TKey,
-    },
+    Ok { },
 }
 
 impl<TKey: Key> Packet<TKey> {
@@ -43,33 +37,27 @@ impl<TKey: Key> Packet<TKey> {
         target.write_u8(self.into()).await?;
 
         match self {
-            Packet::Subscribe { token, id } => {
-                write_key(target, token).await?;
+            Packet::Subscribe { id } => {
                 write_key(target, id).await?;
             }
             Packet::Update {
-                token,
                 id,
                 new_value,
             } => {
-                write_key(target, token).await?;
                 write_key(target, id).await?;
                 new_value.write_to(target).await?;
             }
-            Packet::List { token, id } => {
-                write_key(target, token).await?;
+            Packet::List { id } => {
                 write_key(target, id).await?;
             }
-            Packet::Error { token, value } => {
+            Packet::Error { value } => {
                 if let Value::String(_) = value {
-                    write_key(target, token).await?;
                     value.write_to(target).await?;
                 } else {
                     unreachable!();
                 }
             }
-            Packet::Ok { token } => {
-                write_key(target, token).await?;
+            Packet::Ok { } => {
             }
         };
 
@@ -85,40 +73,33 @@ impl<TKey: Key> Packet<TKey> {
         match packet_type {
             // Subscribe
             1 => {
-                let token = read_key(source).await?;
                 let id = read_key(source).await?;
 
-                Ok(Packet::Subscribe { token, id })
+                Ok(Packet::Subscribe { id })
             }
             // Update
             2 => {
-                let token = read_key(source).await?;
                 let id = read_key(source).await?;
                 let new_value = Value::read_from(source).await?;
 
                 Ok(Packet::Update {
-                    token,
                     id,
                     new_value,
                 })
             }
             // List
             3 => {
-                let token = read_key(source).await?;
                 let id = read_key(source).await?;
 
-                Ok(Packet::List { token, id })
+                Ok(Packet::List { id })
             }
             4 => {
-                let token = read_key(source).await?;
                 let value = Value::read_from(source).await?;
 
-                Ok(Packet::Error { token, value })
+                Ok(Packet::Error { value })
             }
             5 => {
-                let token = read_key(source).await?;
-
-                Ok(Packet::Ok { token })
+                Ok(Packet::Ok { })
             },
             _ => Err(Error::new(ErrorKind::InvalidData, "Invalid packet-type")),
         }
@@ -164,15 +145,14 @@ where
 impl<T: Key> From<&Packet<T>> for u8 {
     fn from(value: &Packet<T>) -> Self {
         match value {
-            Packet::Subscribe { token: _, id: _ } => 1,
+            Packet::Subscribe { id: _ } => 1,
             Packet::Update {
-                token: _,
                 id: _,
                 new_value: _,
             } => 2,
-            Packet::List { token: _, id: _ } => 3,
-            Packet::Error { token: _, value: _ } => 4,
-            Packet::Ok { token: _ } => 5,
+            Packet::List { id: _ } => 3,
+            Packet::Error { value: _ } => 4,
+            Packet::Ok {  } => 5,
         }
     }
 }
@@ -217,7 +197,6 @@ mod tests {
     #[tokio::test]
     async fn serialize_subscribe_packet_works() {
         let packet = Packet::Subscribe {
-            token: StringKey::new("token").unwrap(),
             id: StringKey::new("pointid").unwrap(),
         };
 
@@ -225,20 +204,12 @@ mod tests {
 
         packet.write_to(&mut target).await.unwrap();
 
-        assert_eq!(target.position(), 15);
+        assert_eq!(target.position(), 9);
 
         assert_eq!(
-            &target.get_ref()[0..15],
+            &target.get_ref()[0..9],
             &[
                 1, // Packet-id,
-                5, // token-length
-                // _______
-                116, //  |
-                111, //  |
-                107, //  | <-- "token"
-                101, //  |
-                110, //  |
-                // ______|
                 7, // id-length
                 // _______
                 112, //  |
@@ -256,7 +227,6 @@ mod tests {
     #[tokio::test]
     async fn serialize_update_packet_works() {
         let packet = Packet::Update {
-            token: StringKey::new("token").unwrap(),
             id: StringKey::new("pointid").unwrap(),
             new_value: Value::I64(1234),
         };
@@ -265,20 +235,12 @@ mod tests {
 
         packet.write_to(&mut target).await.unwrap();
 
-        assert_eq!(target.position(), 24);
+        assert_eq!(target.position(), 18);
 
         assert_eq!(
-            &target.get_ref()[0..24],
+            &target.get_ref()[0..18],
             &[
                 2, // Packet-id,
-                5, // token-length
-                // _______
-                116, //  |
-                111, //  |
-                107, //  | <-- "token"
-                101, //  |
-                110, //  |
-                // ______|
                 7, // id-length
                 // _______
                 112, //  |
@@ -308,14 +270,6 @@ mod tests {
     async fn deserialize_subscribe_packet() {
         let data = vec![
             1u8, // Packet-id,
-            5,   // token-length
-            // _______
-            116, //  |
-            111, //  |
-            107, //  | <-- "token"
-            101, //  |
-            110, //  |
-            // ______|
             7, // id-length
             // _______
             112, //  |
@@ -333,7 +287,6 @@ mod tests {
         assert_eq!(
             packet,
             Packet::<StringKey>::Subscribe {
-                token: StringKey::new("token").unwrap(),
                 id: StringKey::new("pointid").unwrap(),
             }
         );
@@ -343,14 +296,6 @@ mod tests {
     async fn deserialize_update_packet() {
         let data = vec![
             2u8, // Packet-id,
-            5,   // token-length
-            // _______
-            116, //  |
-            111, //  |
-            107, //  | <-- "token"
-            101, //  |
-            110, //  |
-            // ______|
             7, // id-length
             // _______
             112, //  |
@@ -379,7 +324,6 @@ mod tests {
         assert_eq!(
             packet,
             Packet::<StringKey>::Update {
-                token: StringKey::new("token").unwrap(),
                 id: StringKey::new("pointid").unwrap(),
                 new_value: Value::I64(1234),
             }

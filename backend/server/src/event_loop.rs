@@ -58,21 +58,20 @@ pub async fn poll(listener: &mut TcpListenerStream, connections: &mut Vec<Connec
                 };
 
                 match packet {
-                    Packet::Subscribe { token, id } => {
+                    Packet::Subscribe { id } => {
                         let added = connection.add_subscription_point(id);
 
                         match added {
-                            true => connection.write_packet(Packet::Ok { token }),
-                            false => connection.write_packet(Packet::Error { token, value: Value::String(String::from("Already subscribed.")) })
+                            true => connection.write_packet(Packet::Ok { }),
+                            false => connection.write_packet(Packet::Error { value: Value::String(String::from("Already subscribed.")) })
                         }.await.unwrap();
                     }
                     Packet::Update {
-                        token: _,
                         id: _,
                         new_value: _,
                     } => todo!(),
-                    Packet::List { token: _, id: _ } => todo!(),
-                    Packet::Error { token: _, value: _ } => {
+                    Packet::List { id: _ } => todo!(),
+                    Packet::Error { value: _ } => {
                         // In this case we emit a disconnect.
                         tx.send((
                             id,

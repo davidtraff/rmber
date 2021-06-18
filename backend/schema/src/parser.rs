@@ -27,7 +27,7 @@ pub fn parse(input: &str) -> Result<Vec<Namespace>, Error<Rule>> {
     Ok(namespaces)
 }
 
-fn traverse_tree(namespaces: &mut HashMap<String, Vec<Point>>, parent: Option<String>, pair: Pair<Rule>) -> Result<(), Error<Rule>> {
+fn traverse_tree(namespaces: &mut HashMap<String, HashSet<Point>>, parent: Option<String>, pair: Pair<Rule>) -> Result<(), Error<Rule>> {
     let contents = pair.into_inner();
     let mut name = None;
     let mut points: HashSet<Point> = HashSet::new();
@@ -48,9 +48,7 @@ fn traverse_tree(namespaces: &mut HashMap<String, Vec<Point>>, parent: Option<St
                 let mut point = convert_point(inner)?;
                 
                 if let Some(previous) = points.take(&point) {
-                    previous.types.into_iter().for_each(|pt| {
-                        point.types.insert(pt);
-                    });
+                    point.merge(previous);
                 }
 
                 assert!(points.insert(point));
@@ -61,9 +59,16 @@ fn traverse_tree(namespaces: &mut HashMap<String, Vec<Point>>, parent: Option<St
 
     if let Some(name) = name {
         if let Some(values) = namespaces.get_mut(&name) {
-            points.into_iter().for_each(|p| values.push(p));
+            // If we already have an equally named point in this namespace we merge it.
+            points.into_iter().for_each(|mut p| {
+                if let Some(previous) = values.take(&p) {
+                    p.merge(previous);
+                }
+
+                values.insert(p);
+            });
         } else {
-            namespaces.insert(name, points.into_iter().collect());
+            namespaces.insert(name, points);
         }
     }
 
