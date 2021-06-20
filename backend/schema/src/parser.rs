@@ -1,6 +1,10 @@
-use std::{collections::{HashMap, HashSet}, convert::{TryFrom, TryInto}};
+use std::{
+    collections::{HashMap, HashSet},
+    convert::{TryFrom, TryInto},
+};
 
-use super::{Namespace, Point, PointType};
+use super::{Namespace, Point, PointType, Schema};
+use indextree::{Arena, NodeId};
 use pest::{
     error::{Error, ErrorVariant},
     iterators::Pair,
@@ -11,42 +15,46 @@ use pest::{
 #[grammar = "schema.pest"]
 struct SchemaParser;
 
-pub fn parse(input: &str) -> Result<Vec<Namespace>, Error<Rule>> {
+pub fn parse(input: &str) -> Result<Schema, Error<Rule>> {
     let result = SchemaParser::parse(Rule::root, input)?;
 
-    let mut namespaces = HashMap::new();
+    let mut arena = Arena::new();
     for namespace in result.into_iter() {
-        traverse_tree(&mut namespaces, None, namespace)?;
+        traverse_tree(&mut arena, None, namespace)?;
     }
 
-    let namespaces = namespaces
-        .into_iter()
-        .map(|(name, points)| Namespace { name, points })
-        .collect();
+    let schema = Schema::new(arena);
 
-    Ok(namespaces)
+    Ok(schema)
 }
 
-fn traverse_tree(namespaces: &mut HashMap<String, HashSet<Point>>, parent: Option<String>, pair: Pair<Rule>) -> Result<(), Error<Rule>> {
+fn traverse_tree(
+    arena: &mut Arena<Namespace>,
+    parent: Option<NodeId>,
+    pair: Pair<Rule>,
+) -> Result<(), Error<Rule>> {
     let contents = pair.into_inner();
-    let mut name = None;
+
     let mut points: HashSet<Point> = HashSet::new();
+    let mut name = None;
+    let mut descendants = vec![];
 
     for inner in contents {
         match inner.as_rule() {
             Rule::namespace => {
-                traverse_tree(namespaces, name.clone(), inner)?;
+                descendants.push(inner);
             }
             Rule::identifier => {
                 if let Some(parent) = &parent {
-                    name = Some(format!("{}.{}", parent, inner.as_str()));
+                    let parent_node = arena.get(*parent).unwrap();
+                    name = Some(format!("{}.{}", parent_node.get().name, inner.as_str()));
                 } else {
                     name = Some(String::from(inner.as_str()));
                 }
             }
             Rule::point => {
                 let mut point = convert_point(inner)?;
-                
+
                 if let Some(previous) = points.take(&point) {
                     point.merge(previous);
                 }
@@ -54,21 +62,41 @@ fn traverse_tree(namespaces: &mut HashMap<String, HashSet<Point>>, parent: Optio
                 assert!(points.insert(point));
             }
             _ => unimplemented!(),
-        }
+        };
     }
 
     if let Some(name) = name {
-        if let Some(values) = namespaces.get_mut(&name) {
-            // If we already have an equally named point in this namespace we merge it.
-            points.into_iter().for_each(|mut p| {
-                if let Some(previous) = values.take(&p) {
-                    p.merge(previous);
-                }
+        let namespace = Namespace {
+            name: name.clone(),
+            points,
+        };
 
-                values.insert(p);
-            });
-        } else {
-            namespaces.insert(name, points);
+        let ns;
+        match parent {
+            Some(parent) => {
+                // If we have a parent and we find a child with the same name is this current
+                // namespace, we want to merge it. Otherwise just place a new namespace under the parent.
+                let existing = parent
+                    .children(&arena)
+                    .find(|id| arena.get(*id).unwrap().get().name.eq(&name));
+
+                if let Some(node_id) = existing {
+                    ns = node_id;
+
+                    let node = arena.get_mut(node_id).unwrap();
+                    node.get_mut().combine(namespace);
+                } else {
+                    ns = arena.new_node(namespace);
+                    parent.append(ns, arena);
+                }
+            }
+            None => {
+                ns = arena.new_node(namespace);
+            }
+        }
+
+        for child in descendants {
+            traverse_tree(arena, Some(ns), child)?
         }
     }
 

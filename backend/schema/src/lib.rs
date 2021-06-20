@@ -5,6 +5,9 @@ extern crate pest;
 extern crate pest_derive;
 
 mod parser;
+mod schema;
+
+pub use schema::*;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum PointType {
@@ -63,6 +66,28 @@ impl Namespace {
             }
         }
     }
+
+    fn combine(&mut self, other: Namespace) {
+        for point in other.points.into_iter() {
+            if let Some(mut p) = self.points.take(&point) {
+                p.merge(point);
+                self.points.insert(p);
+            }
+        }
+    }
+
+    pub fn new(name: String) -> Self {
+        Namespace {
+            name,
+            points: HashSet::new(),
+        }
+    }
+}
+
+impl PartialEq for Namespace {
+    fn eq(&self, other: &Self) -> bool {
+        self.name.eq(&other.name)
+    }
 }
 
 #[cfg(test)]
@@ -80,111 +105,10 @@ mod tests {
                 - asd2: u8 | u16
             }
 
-            second{nested{-asd:u8|string}}
+            second{nested{-asd:u8|string} other_nested{-asd1:u8}}
         ",
         );
 
         let result = parser::parse(&data).unwrap();
-
-        assert_eq!(3, result.len());
-
-        let first = check_for_ns(&result, "first", 3);
-        let asd = check_for_point(first, "asd", 3);
-        check_for_point_type(asd, PointType::U8);
-        check_for_point_type(asd, PointType::String);
-        check_for_point_type(asd, PointType::Blob);
-
-        let asd1 = check_for_point(first, "asd1", 2);
-        check_for_point_type(asd1, PointType::U8);
-        check_for_point_type(asd1, PointType::String);
-
-        let asd2 = check_for_point(first, "asd2", 2);
-        check_for_point_type(asd2, PointType::U8);
-        check_for_point_type(asd2, PointType::U16);
-
-        check_for_ns(&result, "second", 0);
-
-        let nested = check_for_ns(&result, "second.nested", 1);
-        let asd = check_for_point(nested, "asd", 2);
-        check_for_point_type(asd, PointType::U8);
-        check_for_point_type(asd, PointType::String);
-    }
-
-    #[test]
-    fn merge_namespaces() {
-        let data = String::from(
-            "
-            first {
-                - asd: u8 | string
-                - asd1: u8 | string
-                - asd2: u8 | u16
-
-                second {
-                    - test: u32
-                }
-            }
-
-            first {
-                - asd: blob
-
-                second {
-                    - test: string
-                }
-            }
-        ",
-        );
-
-        let result = parser::parse(&data).unwrap();
-
-        dbg!(&result);
-
-        assert_eq!(2, result.len());
-
-        let first = check_for_ns(&result, "first", 3);
-        let asd = check_for_point(first, "asd", 3);
-        check_for_point_type(asd, PointType::U8);
-        check_for_point_type(asd, PointType::String);
-        check_for_point_type(asd, PointType::Blob);
-
-        let asd1 = check_for_point(first, "asd1", 2);
-        check_for_point_type(asd1, PointType::U8);
-        check_for_point_type(asd1, PointType::String);
-
-        let asd2 = check_for_point(first, "asd2", 2);
-        check_for_point_type(asd2, PointType::U8);
-        check_for_point_type(asd2, PointType::U16);
-
-        let first_second = check_for_ns(&result, "first.second", 1);
-        let test = check_for_point(first_second, "test", 2);
-        check_for_point_type(test, PointType::U32);
-        check_for_point_type(test, PointType::String);
-    }
-
-    fn check_for_ns<'a>(
-        ns: &'a Vec<Namespace>,
-        name: &str,
-        expected_count: usize,
-    ) -> &'a Namespace {
-        let item = ns.iter().find(|x| x.name.eq(name)).expect(name);
-
-        assert_eq!(item.points.len(), expected_count);
-
-        item
-    }
-
-    fn check_for_point<'a>(ns: &'a Namespace, name: &str, expected_count: usize) -> &'a Point {
-        let point = ns.points.iter().find(|x| x.name.eq(name)).expect(name);
-
-        assert_eq!(point.types.len(), expected_count);
-
-        point
-    }
-
-    fn check_for_point_type(point: &Point, pt: PointType) {
-        point
-            .types
-            .iter()
-            .find(|x| (*x).eq(&pt))
-            .expect(&format!("{:?} {:?}", point.name, pt));
     }
 }

@@ -9,6 +9,8 @@ pub enum Packet<TKey>
 where
     TKey: Key,
 {
+    // The schema in a string.
+    RegisterSchema { schema: Value },
     /// Subscribe to a point.
     Subscribe {
         id: TKey,
@@ -58,6 +60,13 @@ impl<TKey: Key> Packet<TKey> {
                 }
             }
             Packet::Ok { } => {
+            }
+            Packet::RegisterSchema { schema } => {
+                if let Value::String(_) = schema {
+                    schema.write_to(target).await?;
+                } else {
+                    unreachable!();
+                }
             }
         };
 
@@ -153,13 +162,8 @@ impl<T: Key> From<&Packet<T>> for u8 {
             Packet::List { id: _ } => 3,
             Packet::Error { value: _ } => 4,
             Packet::Ok {  } => 5,
+            Packet::RegisterSchema { schema: _ } => 6,
         }
-    }
-}
-
-impl<T: Key> From<Packet<T>> for u8 {
-    fn from(value: Packet<T>) -> Self {
-        u8::from(&value)
     }
 }
 
