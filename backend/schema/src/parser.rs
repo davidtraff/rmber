@@ -1,15 +1,17 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     convert::{TryFrom, TryInto},
 };
 
-use super::{Namespace, Point, PointType, Schema};
+use super::{Namespace, Point, PointType, schema::Schema};
 use indextree::{Arena, NodeId};
 use pest::{
     error::{Error, ErrorVariant},
     iterators::Pair,
     Parser,
 };
+
+pub const NS_DIVIDER: &str = ".";
 
 #[derive(Parser)]
 #[grammar = "schema.pest"]
@@ -47,7 +49,7 @@ fn traverse_tree(
             Rule::identifier => {
                 if let Some(parent) = &parent {
                     let parent_node = arena.get(*parent).unwrap();
-                    name = Some(format!("{}.{}", parent_node.get().name, inner.as_str()));
+                    name = Some(format!("{}{}{}", parent_node.get().name, NS_DIVIDER, inner.as_str()));
                 } else {
                     name = Some(String::from(inner.as_str()));
                 }

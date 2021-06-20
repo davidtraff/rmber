@@ -6,8 +6,10 @@ extern crate pest_derive;
 
 mod parser;
 mod schema;
+mod query;
 
-pub use schema::*;
+pub use parser::*;
+pub use query::*;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum PointType {
