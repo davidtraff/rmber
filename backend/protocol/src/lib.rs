@@ -25,6 +25,10 @@ impl StringKey {
 
         Ok(StringKey(value.to_lowercase()))
     }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
 }
 
 impl Key for StringKey {

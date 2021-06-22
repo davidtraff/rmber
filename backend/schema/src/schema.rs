@@ -1,45 +1,63 @@
-use std::collections::HashMap;
-
 use super::Namespace;
-use indextree::{Arena, NodeId};
 
 #[derive(Debug)]
 pub struct Schema {
-    mapping: HashMap<String, NodeId>,
-    arena: Arena<Namespace>,
+    namespaces: Vec<Namespace>,
 }
 
 impl Schema {
-    pub fn new(arena: Arena<Namespace>) -> Self {
+    pub fn new(namespaces: Vec<Namespace>) -> Self {
         Schema {
-            mapping: build_mapping(&arena),
-            arena,
+            namespaces,
         }
     }
 
-    pub fn get_namespace(&self, name: &str) -> Option<&Namespace> {
-        match self.mapping.get(name) {
-            Some(id) => match self.arena.get(*id) {
-                Some(node) => Some(node.get()),
-                None => None,
-            },
-            None => None,
+    pub fn empty() -> Self {
+        Schema {
+            namespaces: vec![],
         }
     }
 }
 
-fn build_mapping(arena: &Arena<Namespace>) -> HashMap<String, NodeId> {
-    let nodes: Vec<(String, NodeId)> = arena
-        .iter()
-        .filter(|node| !node.is_removed())
-        .map(|node| (node.get().name.clone(), arena.get_node_id(node).unwrap()))
-        .collect();
+#[cfg(test)]
+mod tests {
+    use crate::parse;
 
-    let mut mapping = HashMap::new();
+    #[test]
+    pub fn it_works() {
+        let schema = parse(
+            "
+            first_namespace {
+                - field1: u8
+                - field2: string
 
-    for (ns, node_id) in nodes {
-        assert!(mapping.insert(ns, node_id).is_none());
+                first_inner {
+                    - field3: i32
+
+                    nested {
+                        - field4: string
+                    }
+                }
+
+                second_inner {
+                    - field5: u32
+                }
+            }
+
+            second_namespace {
+                - field6: u8
+                - field7: blob
+
+                first_inner {
+                    - field8: u8
+                }
+            }
+        ",
+        )
+        .unwrap();
+
+        dbg!(&schema);
+
+        assert_eq!(6, schema.len());
     }
-
-    mapping
 }

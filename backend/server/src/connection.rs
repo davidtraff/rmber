@@ -1,6 +1,5 @@
-use std::borrow::Borrow;
+use std::borrow::{Borrow, BorrowMut};
 use std::cell::RefCell;
-use std::collections::HashSet;
 use std::io::{Error, ErrorKind};
 use std::{net::SocketAddr, sync::Arc};
 use protocol::{Packet, StringKey};
@@ -9,6 +8,7 @@ use tokio::{
     net::TcpStream,
     sync::{mpsc::UnboundedSender, Mutex}
 };
+use schema::SubscriptionSet;
 
 pub type ConnectionId = protocol::RawKey<8>;
 
@@ -16,10 +16,11 @@ pub type ConnectionId = protocol::RawKey<8>;
 pub struct Connection {
     pub id: ConnectionId,
     pub address: SocketAddr,
-
+    
     read: Arc<Mutex<OwnedReadHalf>>,
     write: RefCell<OwnedWriteHalf>,
-    subscriptions: RefCell<HashSet<StringKey>>,
+    subscriptions: RefCell<SubscriptionSet>,
+    raw_schema: RefCell<Option<String>>,
 }
 
 impl Connection {
@@ -33,7 +34,8 @@ impl Connection {
                 // write: Arc::new(Mutex::new(write)),
                 write: RefCell::new(write),
                 address,
-                subscriptions: RefCell::new(HashSet::new()),
+                subscriptions: RefCell::new(SubscriptionSet::empty()),
+                raw_schema: RefCell::new(None),
             }),
             Err(e) => Err(e),
         }
@@ -77,9 +79,15 @@ impl Connection {
         Ok(())
     }
 
-    pub fn add_subscription_point(&self, key: StringKey) -> bool {
-        let mut points = self.subscriptions.borrow_mut();
+    pub fn subscription_set(&self) -> &mut SubscriptionSet {
+        todo!();
+    }
 
-        points.insert(key)
+    pub fn set_schema(&self, new_schema: String) {
+        self.raw_schema.replace(Some(new_schema));
+    }
+
+    pub fn get_schema(&self) -> std::cell::Ref<Option<String>> {
+        self.raw_schema.borrow()
     }
 }

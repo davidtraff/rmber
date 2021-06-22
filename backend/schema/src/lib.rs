@@ -6,10 +6,11 @@ extern crate pest_derive;
 
 mod parser;
 mod schema;
-mod query;
+mod subscription;
 
 pub use parser::*;
-pub use query::*;
+pub use subscription::*;
+pub use schema::*;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum PointType {
@@ -89,28 +90,5 @@ impl Namespace {
 impl PartialEq for Namespace {
     fn eq(&self, other: &Self) -> bool {
         self.name.eq(&other.name)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn nested_test() {
-        let data = String::from(
-            "
-            first {
-                - asd: u8 | string
-                - asd: blob
-                - asd1: u8 | string
-                - asd2: u8 | u16
-            }
-
-            second{nested{-asd:u8|string} other_nested{-asd1:u8}}
-        ",
-        );
-
-        let result = parser::parse(&data).unwrap();
     }
 }

@@ -1,5 +1,6 @@
-use std::io::{Error, ErrorKind};
 use protocol::{Packet, StringKey, Value};
+use schema::Schema;
+use std::io::{Error, ErrorKind};
 use tokio::{net::TcpStream, sync::mpsc::unbounded_channel};
 use tokio_stream::{
     wrappers::{TcpListenerStream, UnboundedReceiverStream},
@@ -16,7 +17,11 @@ pub enum Event {
     ServerError(Error),
 }
 
-pub async fn poll(listener: &mut TcpListenerStream, connections: &mut Vec<Connection>) {
+pub async fn poll(
+    listener: &mut TcpListenerStream,
+    connections: &mut Vec<Connection>,
+    current_schema: &mut Schema,
+) {
     let (tx, rx) = unbounded_channel();
     let rx = UnboundedReceiverStream::new(rx);
 
@@ -59,11 +64,43 @@ pub async fn poll(listener: &mut TcpListenerStream, connections: &mut Vec<Connec
 
                 match packet {
                     Packet::Subscribe { id } => {
-                        let added = connection.add_subscription_point(id);
+                        let set = connection.subscription_set();
 
-                        match added {
-                            true => connection.write_packet(Packet::Ok { }),
-                            false => connection.write_packet(Packet::Error { value: Value::String(String::from("Already subscribed.")) })
+                        let ok = match set.insert_point(id.as_str()) {
+                            Ok(_) => connection.write_packet(Packet::Ok {}),
+                            Err(e) => connection.write_packet(Packet::Error {
+                                value: Value::String(e.to_string()),
+                            }),
+                        }
+                        .await;
+
+                        match ok {
+                            Ok(_) => {}
+                            Err(e) => {
+                                println!("Error when sending response to client: {}", e);
+                            }
+                        }
+                    }
+                    Packet::RegisterSchema { schema } => {
+                        let schema = match schema {
+                            Value::String(s) => s,
+                            _ => {
+                                connection.write_packet(Packet::Error { value: Value::String(String::from("Invalid schema-type")) }).await.unwrap();
+                                continue;
+                            }
+                        };
+
+                        connection.set_schema(schema);
+
+                        match generate_schema(connections) {
+                            Ok(mut new_schema) => {
+                                std::mem::swap(current_schema, &mut new_schema);
+
+                                connection.write_packet(Packet::Ok {})
+                            },
+                            Err(e) => {
+                                connection.write_packet(Packet::Error { value: Value::String(e) })
+                            }
                         }.await.unwrap();
                     }
                     Packet::Update {
@@ -112,6 +149,22 @@ pub async fn poll(listener: &mut TcpListenerStream, connections: &mut Vec<Connec
             }
         }
     }
+}
+
+fn generate_schema(connections: &Vec<Connection>) -> Result<Schema, String> {
+    let schemas= connections.iter()
+        .map(|c| c.get_schema())
+        .filter(|schema| schema.is_some())
+        .map(|schema| schema.as_ref().unwrap().clone())
+        .collect::<Vec<_>>()
+        .join("\r\n");
+
+    let ns = match schema::parse(&schemas) {
+        Ok(ns) => ns,
+        Err(e) => return Err(e.to_string())
+    };
+    
+    Ok(Schema::new(ns))
 }
 
 fn transform_connection(data: std::io::Result<TcpStream>) -> Event {
