@@ -2,8 +2,6 @@ use std::collections::HashSet;
 
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 
-use crate::Schema;
-
 #[derive(Debug)]
 pub struct SubscriptionSet {
     points: HashSet<String>,
@@ -38,6 +36,7 @@ impl SubscriptionSet {
         Ok(())
     }
 
+    #[allow(dead_code)]
     fn matches(&self, candidate: &str) -> bool {
         self.globset.is_match(candidate)
     }

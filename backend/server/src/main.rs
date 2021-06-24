@@ -3,7 +3,7 @@ use std::net::SocketAddr;
 
 mod server;
 mod connection;
-mod event_loop;
+mod event_handlers;
 
 use server::*;
 

@@ -62,6 +62,7 @@ pub struct Namespace {
 }
 
 impl Namespace {
+    #[allow(dead_code)]
     fn merge(self, mut other: Namespace) {
         for mut point in self.points.into_iter() {
             if let Some(other_point) = other.points.take(&point) {
@@ -70,6 +71,7 @@ impl Namespace {
         }
     }
 
+    #[allow(dead_code)]
     fn combine(&mut self, other: Namespace) {
         for point in other.points.into_iter() {
             if let Some(mut p) = self.points.take(&point) {

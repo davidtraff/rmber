@@ -1,14 +1,14 @@
-use std::borrow::{Borrow, BorrowMut};
+use protocol::{Packet, StringKey, Value};
+use schema::SubscriptionSet;
+use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::io::{Error, ErrorKind};
 use std::{net::SocketAddr, sync::Arc};
-use protocol::{Packet, StringKey};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::{
     net::TcpStream,
-    sync::{mpsc::UnboundedSender, Mutex}
+    sync::{mpsc::UnboundedSender, Mutex},
 };
-use schema::SubscriptionSet;
 
 pub type ConnectionId = protocol::RawKey<8>;
 
@@ -16,7 +16,7 @@ pub type ConnectionId = protocol::RawKey<8>;
 pub struct Connection {
     pub id: ConnectionId,
     pub address: SocketAddr,
-    
+
     read: Arc<Mutex<OwnedReadHalf>>,
     write: RefCell<OwnedWriteHalf>,
     subscriptions: RefCell<SubscriptionSet>,
@@ -62,21 +62,56 @@ impl Connection {
                 }
 
                 match error_kind {
-                    Some(ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted | ErrorKind::ConnectionRefused | ErrorKind::NotConnected) => {
+                    Some(
+                        ErrorKind::ConnectionReset
+                        | ErrorKind::ConnectionAborted
+                        | ErrorKind::ConnectionRefused
+                        | ErrorKind::NotConnected,
+                    ) => {
                         break;
-                    },
-                    _ => {},
+                    }
+                    _ => {}
                 }
             }
         });
     }
 
-    pub async fn write_packet<T : Borrow<Packet<StringKey>>>(&self, packet: T) -> Result<(), Error> {
+    pub async fn write_packet<T: Borrow<Packet<StringKey>>>(&self, packet: T) -> Result<(), Error> {
         let mut stream = self.write.borrow_mut();
 
         packet.borrow().write_to(&mut *stream).await?;
 
         Ok(())
+    }
+
+    pub async fn send_ok(&self) {
+        let packet = Packet::Ok {};
+
+        match self.write_packet(packet).await {
+            Ok(_) => {}
+            Err(e) => {
+                println!(
+                    "Could not send OK-packet to connection {}. Reason: {:?}",
+                    self.id, e
+                );
+            }
+        };
+    }
+
+    pub async fn send_err(&self, error: &str) {
+        let packet = Packet::Error {
+            value: Value::String(String::from(error)),
+        };
+
+        match self.write_packet(packet).await {
+            Ok(_) => {}
+            Err(e) => {
+                println!(
+                    "Could not send ERR-packet to connection {}. Reason: {:?}",
+                    self.id, e
+                );
+            }
+        };
     }
 
     pub fn subscription_set(&self) -> &mut SubscriptionSet {
