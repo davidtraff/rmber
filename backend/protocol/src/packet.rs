@@ -105,11 +105,22 @@ impl<TKey: Key> Packet<TKey> {
             4 => {
                 let value = Value::read_from(source).await?;
 
-                Ok(Packet::Error { value })
+                match value {
+                    Value::String(_) => Ok(Packet::Error { value }),
+                    _ => Err(Error::new(ErrorKind::InvalidData, "Invalid error-type"))
+                }
             }
             5 => {
                 Ok(Packet::Ok { })
             },
+            6 => {
+                let schema = Value::read_from(source).await?;
+
+                match schema {
+                    Value::String(_) => Ok(Packet::RegisterSchema { schema }),
+                    _ => Err(Error::new(ErrorKind::InvalidData, "Invalid schema-type"))
+                }
+            }
             _ => Err(Error::new(ErrorKind::InvalidData, "Invalid packet-type")),
         }
     }

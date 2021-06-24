@@ -20,10 +20,9 @@ pub fn handle_new_connection(ctx: EventContext, connection: ConnectionEvent) {
     };
 
     connection.listen(ctx.get_packet_tx());
+    println!("New connection {}", &connection.id);
 
     ctx.add_connection(connection);
-
-    println!("New connection");
 }
 
 pub async fn handle_packet(ctx: EventContext<'_>, (id, packet): PacketEvent) {
@@ -58,6 +57,7 @@ pub async fn handle_packet(ctx: EventContext<'_>, (id, packet): PacketEvent) {
 
             match generate_schema(&*ctx.connections()) {
                 Ok(new_schema) => {
+                    dbg!(&new_schema);
                     ctx.replace_schema(new_schema);
 
                     connection.send_ok().await;
