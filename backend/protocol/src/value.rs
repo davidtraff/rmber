@@ -2,6 +2,8 @@ use super::Error;
 use tokio_byteorder::{BigEndian, AsyncReadBytesExt, AsyncWriteBytesExt};
 use tokio::io::{AsyncRead, AsyncWrite};
 use std::{io::ErrorKind, marker::Unpin};
+use async_recursion::async_recursion;
+
 
 #[derive(Debug, PartialEq)]
 pub enum Value {
@@ -23,6 +25,8 @@ pub enum Value {
 
     F32(f32),
     F64(f64),
+
+    Collection(Vec<Value>)
 }
 
 impl Value {
@@ -30,9 +34,10 @@ impl Value {
         todo!();
     }
 
+    #[async_recursion]
     pub async fn write_to<TTarget>(&self, target: &mut TTarget) -> Result<(), Error>
     where
-        TTarget: AsyncWrite + Unpin,
+        TTarget: AsyncWrite + Unpin + Send,
     {
         target.write_u8(self.into()).await?;
 
@@ -60,14 +65,23 @@ impl Value {
 
             Value::F32(v) => target.write_f32::<BigEndian>(*v).await?,
             Value::F64(v) => target.write_f64::<BigEndian>(*v).await?,
+
+            Value::Collection(collection) => {
+                target.write_u32::<BigEndian>(collection.len() as u32).await?;
+
+                for value in collection {
+                    value.write_to(target).await?;
+                }
+            }
         };
 
         Ok(())
     }
 
+    #[async_recursion]
     pub async fn read_from<TSource>(source: &mut TSource) -> Result<Self, Error>
     where
-        TSource: AsyncRead + Unpin,
+        TSource: AsyncRead + Unpin + Send,
     {
         let value_type = source.read_u8().await?;
 
@@ -109,6 +123,19 @@ impl Value {
             // Floats
             12 => Value::F32(source.read_f32::<BigEndian>().await?),
             13 => Value::F64(source.read_f64::<BigEndian>().await?),
+            // Misc
+            14 => {
+                let len = source.read_u32::<BigEndian>().await?;
+                let mut collection = Vec::with_capacity(len as usize);
+
+                for _ in 0..len {
+                    let value = Value::read_from(source).await?;
+
+                    collection.push(value);
+                }
+
+                Value::Collection(collection)
+            },
             _ => unimplemented!(),
         };
 
@@ -132,6 +159,7 @@ impl From<&Value> for u8 {
             Value::I64(_) => 11,
             Value::F32(_) => 12,
             Value::F64(_) => 13,
+            Value::Collection(_) => 14,
         }
     }
 }

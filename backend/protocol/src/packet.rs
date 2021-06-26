@@ -34,7 +34,7 @@ where
 impl<TKey: Key> Packet<TKey> {
     pub async fn write_to<TTarget>(&self, target: &mut TTarget) -> Result<(), Error>
     where
-        TTarget: AsyncWrite + Unpin,
+        TTarget: AsyncWrite + Unpin + Send,
     {
         target.write_u8(self.into()).await?;
 
@@ -75,7 +75,7 @@ impl<TKey: Key> Packet<TKey> {
 
     pub async fn read_from<TSource>(source: &mut TSource) -> Result<Self, Error>
     where
-        TSource: AsyncRead + Unpin,
+        TSource: AsyncRead + Unpin + Send,
     {
         let packet_type = source.read_u8().await?;
 
