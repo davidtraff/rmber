@@ -1,5 +1,5 @@
 use protocol::{Packet, StringKey, Value};
-use schema::SubscriptionSet;
+use schema::QuerySet;
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::io::{Error, ErrorKind};
@@ -19,7 +19,7 @@ pub struct Connection {
 
     read: Arc<Mutex<OwnedReadHalf>>,
     write: RefCell<OwnedWriteHalf>,
-    subscriptions: RefCell<SubscriptionSet>,
+    subscriptions: RefCell<QuerySet>,
     raw_schema: RefCell<Option<String>>,
 }
 
@@ -34,7 +34,7 @@ impl Connection {
                 // write: Arc::new(Mutex::new(write)),
                 write: RefCell::new(write),
                 address,
-                subscriptions: RefCell::new(SubscriptionSet::empty()),
+                subscriptions: RefCell::new(QuerySet::empty()),
                 raw_schema: RefCell::new(None),
             }),
             Err(e) => Err(e),
@@ -114,7 +114,7 @@ impl Connection {
         };
     }
 
-    pub fn subscription_set(&self) -> &mut SubscriptionSet {
+    pub fn subscription_set(&self) -> &mut QuerySet {
         todo!();
     }
 

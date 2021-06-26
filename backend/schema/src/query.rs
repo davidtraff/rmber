@@ -3,12 +3,12 @@ use std::collections::HashSet;
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 
 #[derive(Debug)]
-pub struct SubscriptionSet {
+pub struct QuerySet {
     points: HashSet<String>,
     globset: GlobSet,
 }
 
-impl SubscriptionSet {
+impl QuerySet {
     pub fn new<TSource>(source: TSource) -> Result<Self, globset::Error>
     where
         TSource: IntoIterator<Item = String>,
@@ -16,11 +16,25 @@ impl SubscriptionSet {
         let points = source.into_iter().collect();
         let globset = build_glob_matcher(&points)?;
 
-        Ok(SubscriptionSet { points, globset })
+        Ok(QuerySet { points, globset })
+    }
+
+    pub fn single(source: &str) -> Result<Self, globset::Error> {
+        let points = std::iter::once(String::from(source)).collect();
+        let globset = build_glob_matcher(&points)?;
+
+        Ok(QuerySet { points, globset })
+    }
+
+    pub fn from_string(source: String) -> Result<Self, globset::Error> {
+        let points = std::iter::once(source).collect();
+        let globset = build_glob_matcher(&points)?;
+
+        Ok(QuerySet { points, globset })
     }
 
     pub fn empty() -> Self {
-        SubscriptionSet {
+        QuerySet {
             points: HashSet::new(),
             globset: build_glob_matcher(&HashSet::new()).unwrap(),
         }
@@ -36,8 +50,7 @@ impl SubscriptionSet {
         Ok(())
     }
 
-    #[allow(dead_code)]
-    fn matches(&self, candidate: &str) -> bool {
+    pub fn matches(&self, candidate: &str) -> bool {
         self.globset.is_match(candidate)
     }
 }
@@ -69,7 +82,7 @@ pub mod tests {
             String::from("some_other_namespace/**/specific_point")
         ];
 
-        let set = SubscriptionSet::new(source).unwrap();
+        let set = QuerySet::new(source).unwrap();
 
         assert!(set.matches("some_namespace/a_point"));
         assert!(!set.matches("some_namespace/nested/a_point"));

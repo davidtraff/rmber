@@ -88,6 +88,10 @@ impl<'a> EventContext<'a> {
         self.connections.borrow()
     }
 
+    pub fn schema(&self) -> std::cell::Ref<&mut Schema> {
+        self.schema.borrow()
+    }
+
     pub fn replace_schema(&self, mut new_schema: Schema) {
         let mut schema = self.schema.borrow_mut();
 

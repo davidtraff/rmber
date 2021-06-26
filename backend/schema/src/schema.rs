@@ -1,3 +1,5 @@
+use crate::Point;
+
 use super::Namespace;
 
 #[derive(Debug)]
@@ -16,6 +18,11 @@ impl Schema {
         Schema {
             namespaces: vec![],
         }
+    }
+
+    pub fn points(&self) -> impl Iterator<Item = &Point> {
+        self.namespaces.iter()
+            .flat_map(|f| &f.points)
     }
 }
 

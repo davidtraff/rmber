@@ -29,6 +29,10 @@ impl StringKey {
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
+
+    pub fn get_string(self) -> String {
+        self.0
+    }
 }
 
 impl Key for StringKey {

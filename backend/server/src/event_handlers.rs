@@ -1,9 +1,12 @@
 use std::io::{Error, ErrorKind};
 
 use protocol::{Packet, Value};
-use schema::Schema;
+use schema::{QuerySet, Schema};
 
-use crate::{connection::Connection, server::{ConnectionErrorEvent, ConnectionEvent, EventContext, PacketEvent, ServerErrorEvent}};
+use crate::{
+    connection::Connection,
+    server::{ConnectionErrorEvent, ConnectionEvent, EventContext, PacketEvent, ServerErrorEvent},
+};
 
 pub fn handle_new_connection(ctx: EventContext, connection: ConnectionEvent) {
     let address = match connection.peer_addr() {
@@ -71,7 +74,20 @@ pub async fn handle_packet(ctx: EventContext<'_>, (id, packet): PacketEvent) {
             id: _,
             new_value: _,
         } => todo!(),
-        Packet::List { id: _ } => todo!(),
+        Packet::List { id } => {
+            let schema = ctx.schema();
+            let points = schema.points();
+
+            let query = match QuerySet::from_string(id.get_string()) {
+                Ok(q) => q,
+                Err(e) => {
+                    connection.send_err(&e.to_string()).await;
+                    return;
+                }
+            };
+
+            let matches: Vec<_> = points.filter(|p| query.matches(&p.full_name())).collect();
+        }
         Packet::Error { value: _ } => {
             // In this case we emit a disconnect.
             ctx.emit_packet_error(

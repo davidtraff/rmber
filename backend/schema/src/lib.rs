@@ -6,10 +6,10 @@ extern crate pest_derive;
 
 mod parser;
 mod schema;
-mod subscription;
+mod query;
 
 pub use parser::*;
-pub use subscription::*;
+pub use query::*;
 pub use schema::*;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -33,6 +33,7 @@ pub enum PointType {
 pub struct Point {
     pub types: HashSet<PointType>,
     pub name: String,
+    pub namespace: String,
 }
 
 impl Point {
@@ -40,6 +41,10 @@ impl Point {
         other.types.into_iter().for_each(|p| {
             self.types.insert(p);
         });
+    }
+
+    pub fn full_name(&self) -> String {
+        format!("{}{}{}", self.namespace, NS_DIVIDER, self.name)
     }
 }
 
@@ -55,7 +60,7 @@ impl PartialEq for Point {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq)]
 pub struct Namespace {
     pub name: String,
     pub points: HashSet<Point>,

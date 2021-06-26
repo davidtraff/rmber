@@ -1,4 +1,7 @@
-use std::{collections::{HashMap, HashSet}, convert::{TryFrom, TryInto}};
+use std::{
+    collections::{HashMap, HashSet},
+    convert::{TryFrom, TryInto},
+};
 
 use super::{Namespace, Point, PointType};
 use pest::{
@@ -29,10 +32,14 @@ pub fn parse(input: &str) -> Result<Vec<Namespace>, Error<Rule>> {
     Ok(namespaces)
 }
 
-fn traverse_tree(namespaces: &mut HashMap<String, HashSet<Point>>, parent: Option<String>, pair: Pair<Rule>) -> Result<(), Error<Rule>> {
+fn traverse_tree(
+    namespaces: &mut HashMap<String, HashSet<Point>>,
+    parent: Option<String>,
+    pair: Pair<Rule>,
+) -> Result<(), Error<Rule>> {
     let contents = pair.into_inner();
     let mut name = None;
-    let mut points: HashSet<Point> = HashSet::new();
+    let mut point_rules: Vec<Pair<Rule>> = vec![];
 
     for inner in contents {
         match inner.as_rule() {
@@ -47,21 +54,27 @@ fn traverse_tree(namespaces: &mut HashMap<String, HashSet<Point>>, parent: Optio
                 }
             }
             Rule::point => {
-                let mut point = convert_point(inner)?;
-                
-                if let Some(previous) = points.take(&point) {
-                    previous.types.into_iter().for_each(|pt| {
-                        point.types.insert(pt);
-                    });
-                }
-
-                assert!(points.insert(point));
+                point_rules.push(inner);
             }
             _ => unimplemented!(),
         }
     }
 
     if let Some(name) = name {
+        let mut points: HashSet<Point> = HashSet::new();
+
+        for point in point_rules {
+            let mut point = convert_point(&name, point)?;
+
+            if let Some(previous) = points.take(&point) {
+                previous.types.into_iter().for_each(|pt| {
+                    point.types.insert(pt);
+                });
+            }
+
+            assert!(points.insert(point));
+        }
+
         if let Some(values) = namespaces.get_mut(&name) {
             // If we already have an equally named point in this namespace we merge it.
             points.into_iter().for_each(|mut p| {
@@ -79,7 +92,7 @@ fn traverse_tree(namespaces: &mut HashMap<String, HashSet<Point>>, parent: Optio
     Ok(())
 }
 
-fn convert_point(point: Pair<Rule>) -> Result<Point, Error<Rule>> {
+fn convert_point(namespace: &str, point: Pair<Rule>) -> Result<Point, Error<Rule>> {
     assert_eq!(Rule::point, point.as_rule());
     let mut name = None;
     let mut types = HashSet::new();
@@ -101,6 +114,7 @@ fn convert_point(point: Pair<Rule>) -> Result<Point, Error<Rule>> {
     Ok(Point {
         name: name.unwrap(),
         types,
+        namespace: String::from(namespace),
     })
 }
 
