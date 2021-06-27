@@ -20,10 +20,6 @@ where
         id: TKey,
         new_value: Value,
     },
-    /// List points.
-    List {
-        id: TKey,
-    },
     /// Error. Will always be string.
     Error {
         value: Value,
@@ -48,9 +44,6 @@ impl<TKey: Key> Packet<TKey> {
             } => {
                 write_key(target, id).await?;
                 new_value.write_to(target).await?;
-            }
-            Packet::List { id } => {
-                write_key(target, id).await?;
             }
             Packet::Error { value } => {
                 if let Value::String(_) = value {
@@ -95,12 +88,6 @@ impl<TKey: Key> Packet<TKey> {
                     id,
                     new_value,
                 })
-            }
-            // List
-            3 => {
-                let id = read_key(source).await?;
-
-                Ok(Packet::List { id })
             }
             4 => {
                 let value = Value::read_from(source).await?;
@@ -170,7 +157,6 @@ impl<T: Key> From<&Packet<T>> for u8 {
                 id: _,
                 new_value: _,
             } => 2,
-            Packet::List { id: _ } => 3,
             Packet::Error { value: _ } => 4,
             Packet::Ok {  } => 5,
             Packet::RegisterSchema { schema: _ } => 6,
