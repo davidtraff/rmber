@@ -71,9 +71,20 @@ pub async fn handle_packet(ctx: EventContext<'_>, (id, packet): PacketEvent) {
             };
         }
         Packet::Update {
-            id: _,
-            new_value: _,
-        } => todo!(),
+            id,
+            new_value,
+        } => {
+            let schema = ctx.schema();
+
+            // TODO: If the iterative search becomes too slow consider using some tree based container.
+            let point = schema.points().find(|x| x.full_name().eq(id.as_str()));
+            if let Some(p) = point {
+                println!("Updating point {} value {:#?}", p.full_name(), &new_value);
+            } else {
+                connection.send_err(&format!("Unknown point {}", id.as_str())).await;
+                return;
+            }
+        },
         Packet::Error { value: _ } => {
             // In this case we emit a disconnect.
             ctx.emit_packet_error(
