@@ -3,5 +3,6 @@ members = [
     "./server",
     "./protocol",
     "./client",
-    "./schema"
+    "./schema",
+    "./store"
 ]
