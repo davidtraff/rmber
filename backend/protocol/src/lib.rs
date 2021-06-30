@@ -1,13 +1,13 @@
-mod value;
 mod packet;
+mod value;
 
 use std::convert::TryInto;
 
+pub use packet::*;
+use rand::{Fill, Rng};
 use std::hash::Hash;
 use std::io::{Error, ErrorKind};
-use rand::{Fill, Rng};
 pub use value::*;
-pub use packet::*;
 
 pub trait Key: Sized {
     fn from_slice(key: &[u8]) -> Result<Self, Error>;
@@ -20,7 +20,10 @@ pub struct StringKey(String);
 impl StringKey {
     pub fn new(value: &str) -> Result<Self, Error> {
         if !value.is_ascii() {
-            return Err(Error::new(ErrorKind::InvalidData, "Invalid key. Only ascii-characters allowed"));
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                "Invalid key. Only ascii-characters allowed",
+            ));
         }
 
         Ok(StringKey(value.to_lowercase()))
@@ -39,10 +42,7 @@ impl Key for StringKey {
     fn from_slice(key: &[u8]) -> Result<Self, Error> {
         match std::str::from_utf8(key) {
             Ok(key) => StringKey::new(key),
-            Err(e) => Err(Error::new(
-                ErrorKind::InvalidInput,
-                e,
-            )),
+            Err(e) => Err(Error::new(ErrorKind::InvalidInput, e)),
         }
     }
 
@@ -74,14 +74,21 @@ impl<const LEN: usize> RawKey<LEN> {
 
 impl<const LEN: usize> Fill for RawKey<LEN> {
     fn try_fill<R: Rng + ?Sized>(&mut self, rng: &mut R) -> Result<(), rand::Error> {
-        rng.try_fill_bytes(&mut self.0) 
+        rng.try_fill_bytes(&mut self.0)
     }
 }
 
 impl<const LEN: usize> Key for RawKey<LEN> {
     fn from_slice(key: &[u8]) -> Result<Self, Error> {
         if key.len() != LEN {
-            return Err(Error::new(ErrorKind::InvalidInput, format!("Invalid key length. Expected {} bytes but got {}", LEN, key.len())));
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                format!(
+                    "Invalid key length. Expected {} bytes but got {}",
+                    LEN,
+                    key.len()
+                ),
+            ));
         }
 
         let clone = key.clone();
