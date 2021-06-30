@@ -114,8 +114,8 @@ impl Connection {
         };
     }
 
-    pub fn subscription_set(&self) -> &mut QuerySet {
-        todo!();
+    pub fn subscription_set(&self) -> std::cell::RefMut<QuerySet> {
+        self.subscriptions.borrow_mut()
     }
 
     pub fn set_schema(&self, new_schema: String) {

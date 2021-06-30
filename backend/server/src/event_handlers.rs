@@ -38,7 +38,7 @@ pub async fn handle_packet(ctx: EventContext<'_>, (id, packet): PacketEvent) {
 
     match packet {
         Packet::Subscribe { id } => {
-            let set = connection.subscription_set();
+            let mut set = connection.subscription_set();
 
             match set.insert_point(id.as_str()) {
                 Ok(_) => connection.send_ok().await,

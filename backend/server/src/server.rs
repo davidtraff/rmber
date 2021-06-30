@@ -92,10 +92,10 @@ impl<'a> EventContext<'a> {
         self.schema.borrow()
     }
 
-    pub fn replace_schema(&self, mut new_schema: Schema) {
+    pub fn replace_schema(&self, new_schema: Schema) -> Schema {
         let mut schema = self.schema.borrow_mut();
 
-        std::mem::swap(*schema, &mut new_schema);
+        std::mem::replace(*schema, new_schema)
     }
 }
 
