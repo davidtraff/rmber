@@ -7,3 +7,6 @@ edition = "2018"
 
 [dependencies]
 rocksdb = "0.16.0"
+schema = { path = "../schema" }
+protocol = { path = "../protocol" }
+tokio = { version = "1.6.0", features = ["full"] }

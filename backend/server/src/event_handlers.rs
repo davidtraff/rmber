@@ -1,14 +1,13 @@
 use std::io::{Error, ErrorKind};
 
 use protocol::{Packet, Value};
-use schema::Schema;
 
 use crate::{
     connection::Connection,
     server::{ConnectionErrorEvent, ConnectionEvent, EventContext, PacketEvent, ServerErrorEvent},
 };
 
-pub fn handle_new_connection(ctx: EventContext, connection: ConnectionEvent) {
+pub fn handle_new_connection((_, connections, tx): EventContext, connection: ConnectionEvent) {
     let address = match connection.peer_addr() {
         Ok(addr) => addr,
         Err(_) => return,
@@ -22,14 +21,13 @@ pub fn handle_new_connection(ctx: EventContext, connection: ConnectionEvent) {
         }
     };
 
-    connection.listen(ctx.get_packet_tx());
+    connection.listen(tx.clone());
     println!("New connection {}", &connection.id);
 
-    ctx.add_connection(connection);
+    connections.push(connection);
 }
 
-pub async fn handle_packet(ctx: EventContext<'_>, (id, packet): PacketEvent) {
-    let connections = ctx.connections();
+pub async fn handle_packet((store, connections, tx): EventContext<'_>, (id, packet): PacketEvent) {
     let connection = connections.iter().find(|c| c.id.eq(&id));
     let connection = match connection {
         Some(c) => c,
@@ -58,68 +56,46 @@ pub async fn handle_packet(ctx: EventContext<'_>, (id, packet): PacketEvent) {
 
             connection.set_schema(schema);
 
-            match generate_schema(&*ctx.connections()) {
-                Ok(new_schema) => {
-                    dbg!(&new_schema);
-                    ctx.replace_schema(new_schema);
+            let schemas = connections.iter()
+                .map(|c| c.get_schema())
+                .filter(|c| c.is_some())
+                .map(|c| c.as_ref().unwrap().clone());
 
-                    connection.send_ok().await;
-                }
-                Err(e) => {
-                    connection.send_err(&e).await;
-                }
-            };
+            if let Err(e) = store.build_schema(schemas) {
+                connection.send_err(&e.to_string()).await;
+            } else {
+                connection.send_ok().await;
+            }
         }
         Packet::Update {
             id,
             new_value,
         } => {
-            let schema = ctx.schema();
-
-            // TODO: If the iterative search becomes too slow consider using some tree based container.
-            let point = schema.points().find(|x| x.full_name().eq(id.as_str()));
-            if let Some(p) = point {
-                println!("Updating point {} value {:#?}", p.full_name(), &new_value);
-            } else {
-                connection.send_err(&format!("Unknown point {}", id.as_str())).await;
-                return;
+            match store.update_point(id, new_value) {
+                Ok(_) => connection.send_ok().await,
+                Err(e) => connection.send_err(&e.to_string()).await,
             }
         },
         Packet::Error { value: _ } => {
             // In this case we emit a disconnect.
-            ctx.emit_packet_error(
-                &id,
-                Error::new(ErrorKind::ConnectionAborted, "Client error."),
+            let msg = (
+                id,
+                Err(Error::new(ErrorKind::ConnectionAborted, "Client error."))
             );
-        }
+
+            tx.send(msg).unwrap();
+        },
         _ => {}
     }
 }
 
-fn generate_schema(connections: &Vec<Connection>) -> Result<Schema, String> {
-    let schemas = connections
-        .iter()
-        .map(|c| c.get_schema())
-        .filter(|schema| schema.is_some())
-        .map(|schema| schema.as_ref().unwrap().clone())
-        .collect::<Vec<_>>()
-        .join("\r\n");
-
-    let ns = match schema::parse(&schemas) {
-        Ok(ns) => ns,
-        Err(e) => return Err(e.to_string()),
-    };
-
-    Ok(Schema::new(ns))
-}
-
-pub fn connection_error(ctx: EventContext, (id, e): ConnectionErrorEvent) {
+pub fn connection_error((_, connections, _): EventContext, (id, e): ConnectionErrorEvent) {
     println!("Connection-error {:?}", e);
 
     match e.kind() {
         ErrorKind::ConnectionReset => {
-            if !ctx.remove_connection(&id) {
-                println!("Couldn't remove connection {}", id);
+            if let Some(idx) = connections.iter().position(|c| c.id.eq(&id)) {
+                connections.remove(idx);
             }
         }
         _ => {}

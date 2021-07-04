@@ -34,17 +34,25 @@ pub struct Point {
     pub types: HashSet<PointType>,
     pub name: String,
     pub namespace: String,
+    pub full_name: String,
 }
 
 impl Point {
+    pub fn new(name: String, namespace: String, types: HashSet<PointType>) -> Self {
+        let full_name = format!("{}{}{}", &namespace, NS_DIVIDER, &name);
+        
+        Point {
+            name,
+            namespace,
+            types,
+            full_name,
+        }
+    }
+
     pub fn merge(&mut self, other: Point) {
         other.types.into_iter().for_each(|p| {
             self.types.insert(p);
         });
-    }
-
-    pub fn full_name(&self) -> String {
-        format!("{}{}{}", self.namespace, NS_DIVIDER, self.name)
     }
 }
 

@@ -5,10 +5,12 @@ use std::{
 
 use super::{Namespace, Point, PointType};
 use pest::{
-    error::{Error, ErrorVariant},
+    error::ErrorVariant,
     iterators::Pair,
     Parser,
 };
+
+pub use pest::error::Error;
 
 pub const NS_DIVIDER: &str = "/";
 
@@ -111,11 +113,7 @@ fn convert_point(namespace: &str, point: Pair<Rule>) -> Result<Point, Error<Rule
         }
     }
 
-    Ok(Point {
-        name: name.unwrap(),
-        types,
-        namespace: String::from(namespace),
-    })
+    Ok(Point::new(name.unwrap(), String::from(namespace), types))
 }
 
 impl TryFrom<Pair<'_, Rule>> for super::PointType {

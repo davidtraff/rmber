@@ -11,3 +11,4 @@ tokio-byteorder = "0.3.0"
 tokio-stream = { version = "0.1.6", features = ["net"]}
 protocol = { path = "../protocol" }
 schema = { path = "../schema" }
+store = { path = "../store" }
