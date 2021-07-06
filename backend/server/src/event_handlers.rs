@@ -1,6 +1,6 @@
 use std::io::{Error, ErrorKind};
 
-use protocol::{Packet, Value};
+use protocol::{PACKET_SCHEMA_ERR, PACKET_SUBSCRIPTION_ERR, PACKET_UPDATE_ERR, Packet};
 
 use crate::{
     connection::Connection,
@@ -40,20 +40,10 @@ pub async fn handle_packet((store, connections, tx): EventContext<'_>, (id, pack
 
             match set.insert_point(id.as_str()) {
                 Ok(_) => connection.send_ok().await,
-                Err(e) => connection.send_err(&e.to_string()).await,
+                Err(e) => connection.send_err(PACKET_SUBSCRIPTION_ERR, &e.to_string()).await,
             };
         }
         Packet::RegisterSchema { schema } => {
-            let schema = match schema {
-                Value::String(s) => s,
-                _ => {
-                    connection
-                        .send_err("Invalid schema-type. Expected String")
-                        .await;
-                    return;
-                }
-            };
-
             connection.set_schema(schema);
 
             let schemas = connections.iter()
@@ -62,7 +52,7 @@ pub async fn handle_packet((store, connections, tx): EventContext<'_>, (id, pack
                 .map(|c| c.as_ref().unwrap().clone());
 
             if let Err(e) = store.build_schema(schemas) {
-                connection.send_err(&e.to_string()).await;
+                connection.send_err(PACKET_SCHEMA_ERR, &e.to_string()).await;
             } else {
                 connection.send_ok().await;
             }
@@ -71,12 +61,12 @@ pub async fn handle_packet((store, connections, tx): EventContext<'_>, (id, pack
             id,
             new_value,
         } => {
-            match store.update_point(id, new_value) {
+            match store.update_point(id, new_value).await {
                 Ok(_) => connection.send_ok().await,
-                Err(e) => connection.send_err(&e.to_string()).await,
+                Err(e) => connection.send_err(PACKET_UPDATE_ERR, &e.to_string()).await,
             }
         },
-        Packet::Error { value: _ } => {
+        Packet::Error { code: _, message: _ } => {
             // In this case we emit a disconnect.
             let msg = (
                 id,

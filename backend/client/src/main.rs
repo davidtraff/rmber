@@ -12,7 +12,7 @@ async fn main() {
         }
     ";
 
-    let schema = Packet::<StringKey>::RegisterSchema { schema: Value::String(String::from(schema)) };
+    let schema = Packet::<StringKey>::RegisterSchema { schema: String::from(schema) };
     schema.write_to(&mut stream).await.unwrap();
 
     let update = Packet::<StringKey>::Update { id: StringKey::new("first_namespace/some_value").unwrap(), new_value: Value::U8(255) };

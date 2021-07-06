@@ -1,15 +1,17 @@
 use protocol::{Key, StringKey, Value};
 use schema::{Error, Point, PointType, QuerySet, Rule, Schema, parse};
+use async_trait::async_trait;
 
 pub mod rocksdb;
 
+#[async_trait(?Send)]
 pub trait Store<TKey>
 where
     TKey: Key,
 {
-    fn store_value(&mut self, key: TKey, value: Value) -> Result<(), std::io::Error>;
+    async fn store_value(&mut self, key: TKey, value: Value) -> Result<(), std::io::Error>;
 
-    fn get_value(&mut self, key: TKey) -> Option<Value>;
+    async fn get_value(&mut self, key: TKey) -> Option<Value>;
 }
 
 pub struct ValueStore<TStore>
@@ -65,7 +67,7 @@ where
         self.schema.points().find(|p| p.full_name.eq(query))
     }
 
-    pub fn update_point(&mut self, key: StringKey, new_value: Value) -> Result<(), std::io::Error> {
+    pub async fn update_point(&mut self, key: StringKey, new_value: Value) -> Result<(), std::io::Error> {
         use std::io::{Error, ErrorKind};
 
         let point = match self.query_single(key.as_str()) {
@@ -79,7 +81,7 @@ where
             return Err(Error::new(ErrorKind::InvalidData, "Invalid point-type."));
         }
 
-        self.store.store_value(key, new_value)
+        self.store.store_value(key, new_value).await
     }
 }
 

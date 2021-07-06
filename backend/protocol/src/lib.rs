@@ -1,13 +1,15 @@
 mod packet;
 mod value;
+mod error_code;
 
 use std::convert::TryInto;
-
-pub use packet::*;
 use rand::{Fill, Rng};
 use std::hash::Hash;
 use std::io::{Error, ErrorKind};
+
+pub use packet::*;
 pub use value::*;
+pub use error_code::*;
 
 pub trait Key: Sized {
     fn from_slice(key: &[u8]) -> Result<Self, Error>;

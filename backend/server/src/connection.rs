@@ -1,6 +1,5 @@
-use protocol::{Packet, StringKey, Value};
+use protocol::{Packet, StringKey};
 use schema::QuerySet;
-use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::io::{Error, ErrorKind};
 use std::{net::SocketAddr, sync::Arc};
@@ -76,10 +75,10 @@ impl Connection {
         });
     }
 
-    pub async fn write_packet<T: Borrow<Packet<StringKey>>>(&self, packet: T) -> Result<(), Error> {
+    pub async fn write_packet(&self, packet: Packet<StringKey>) -> Result<(), Error> {
         let mut stream = self.write.borrow_mut();
 
-        packet.borrow().write_to(&mut *stream).await?;
+        packet.write_to(&mut *stream).await?;
 
         Ok(())
     }
@@ -98,9 +97,10 @@ impl Connection {
         };
     }
 
-    pub async fn send_err(&self, error: &str) {
+    pub async fn send_err(&self, code: u32, error: &str) {
         let packet = Packet::Error {
-            value: Value::String(String::from(error)),
+            code,
+            message: String::from(error),
         };
 
         match self.write_packet(packet).await {

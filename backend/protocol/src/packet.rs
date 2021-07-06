@@ -10,7 +10,9 @@ where
     TKey: Key,
 {
     // The schema in a string.
-    RegisterSchema { schema: Value },
+    RegisterSchema {
+        schema: String,
+    },
     /// Subscribe to a point.
     Subscribe {
         id: TKey,
@@ -22,44 +24,34 @@ where
     },
     /// Error. Will always be string.
     Error {
-        value: Value,
+        code: u32,
+        message: String,
     },
-    Ok { },
+    Ok {},
 }
 
 impl<TKey: Key> Packet<TKey> {
-    pub async fn write_to<TTarget>(&self, target: &mut TTarget) -> Result<(), Error>
+    pub async fn write_to<TTarget>(self, target: &mut TTarget) -> Result<(), Error>
     where
         TTarget: AsyncWrite + Unpin + Send,
     {
-        target.write_u8(self.into()).await?;
+        target.write_u8((&self).into()).await?;
 
         match self {
             Packet::Subscribe { id } => {
-                write_key(target, id).await?;
+                write_key(target, &id).await?;
             }
-            Packet::Update {
-                id,
-                new_value,
-            } => {
-                write_key(target, id).await?;
+            Packet::Update { id, new_value } => {
+                write_key(target, &id).await?;
                 new_value.write_to(target).await?;
             }
-            Packet::Error { value } => {
-                if let Value::String(_) = value {
-                    value.write_to(target).await?;
-                } else {
-                    unreachable!();
-                }
+            Packet::Error { code, message } => {
+                Value::U32(code).write_to(target).await?;
+                Value::String(message).write_to(target).await?;
             }
-            Packet::Ok { } => {
-            }
+            Packet::Ok {} => {}
             Packet::RegisterSchema { schema } => {
-                if let Value::String(_) = schema {
-                    schema.write_to(target).await?;
-                } else {
-                    unreachable!();
-                }
+                Value::String(schema).write_to(target).await?;
             }
         };
 
@@ -84,28 +76,28 @@ impl<TKey: Key> Packet<TKey> {
                 let id = read_key(source).await?;
                 let new_value = Value::read_from(source).await?;
 
-                Ok(Packet::Update {
-                    id,
-                    new_value,
-                })
+                Ok(Packet::Update { id, new_value })
             }
             4 => {
-                let value = Value::read_from(source).await?;
+                let content = (
+                    Value::read_from(source).await?,
+                    Value::read_from(source).await?,
+                );
 
-                match value {
-                    Value::String(_) => Ok(Packet::Error { value }),
-                    _ => Err(Error::new(ErrorKind::InvalidData, "Invalid error-type"))
+                match content {
+                    (Value::U32(code), Value::String(message)) => {
+                        Ok(Packet::Error { code, message })
+                    }
+                    _ => Err(Error::new(ErrorKind::InvalidInput, "Invalid value")),
                 }
             }
-            5 => {
-                Ok(Packet::Ok { })
-            },
+            5 => Ok(Packet::Ok {}),
             6 => {
                 let schema = Value::read_from(source).await?;
 
                 match schema {
-                    Value::String(_) => Ok(Packet::RegisterSchema { schema }),
-                    _ => Err(Error::new(ErrorKind::InvalidData, "Invalid schema-type"))
+                    Value::String(schema) => Ok(Packet::RegisterSchema { schema }),
+                    _ => Err(Error::new(ErrorKind::InvalidData, "Invalid schema-type")),
                 }
             }
             _ => Err(Error::new(ErrorKind::InvalidData, "Invalid packet-type")),
@@ -157,8 +149,8 @@ impl<T: Key> From<&Packet<T>> for u8 {
                 id: _,
                 new_value: _,
             } => 2,
-            Packet::Error { value: _ } => 4,
-            Packet::Ok {  } => 5,
+            Packet::Error { code: _, message: _ } => 4,
+            Packet::Ok {} => 5,
             Packet::RegisterSchema { schema: _ } => 6,
         }
     }
@@ -271,7 +263,7 @@ mod tests {
     async fn deserialize_subscribe_packet() {
         let data = vec![
             1u8, // Packet-id,
-            7, // id-length
+            7,   // id-length
             // _______
             112, //  |
             111, //  |
@@ -297,7 +289,7 @@ mod tests {
     async fn deserialize_update_packet() {
         let data = vec![
             2u8, // Packet-id,
-            7, // id-length
+            7,   // id-length
             // _______
             112, //  |
             111, //  |
