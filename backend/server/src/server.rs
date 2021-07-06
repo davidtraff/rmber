@@ -13,7 +13,7 @@ use tokio_stream::{
 };
 
 use crate::connection::{Connection, ConnectionId};
-use crate::event_handlers::{connection_error, handle_new_connection, handle_packet, server_error};
+use crate::event_handlers::{connection_error, handle_new_connection, handle_packet, point_update, server_error};
 
 type PacketTx = UnboundedSender<(ConnectionId, Result<Packet<StringKey>, Error>)>;
 type PointTx = UnboundedSender<(StringKey, Value)>;
@@ -23,22 +23,17 @@ pub type ConnectionEvent = TcpStream;
 pub type PacketEvent = (ConnectionId, Packet<StringKey>);
 pub type ConnectionErrorEvent = (ConnectionId, Error);
 pub type ServerErrorEvent = Error;
+pub type PointUpdateEvent = (StringKey, Value);
 
 pub type EventContext<'a> = (&'a mut RocksDBStore, &'a mut Vec<Connection>, &'a PacketTx, &'a PointTx);
 
-// pub struct EventContext<'a> {
-//     pub store: &'a mut RocksDBStore,
-//     connections: &'a mut Vec<Connection>,
-//     packet_tx: &'a PacketTx,
-// }
-
 #[derive(Debug)]
 enum Event {
-    Connection(TcpStream),
-    Packet((ConnectionId, Packet<StringKey>)),
-    ConnectionError((ConnectionId, Error)),
-    ServerError(Error),
-    PointUpdate((StringKey, Value))
+    Connection(ConnectionEvent),
+    Packet(PacketEvent),
+    ConnectionError(ConnectionErrorEvent),
+    ServerError(ServerErrorEvent),
+    PointUpdate(PointUpdateEvent)
 }
 
 pub struct Server {
@@ -92,8 +87,8 @@ impl Server {
                 Some(Event::ConnectionError(e)) => {
                     connection_error(ctx, e);
                 }
-                Some(Event::PointUpdate((_, _))) => {
-                    // println!("Point-update stored: {} {:?}", name, value);
+                Some(Event::PointUpdate(e)) => {
+                    point_update(ctx, e).await;
                 }
                 Some(Event::ServerError(e)) => {
                     server_error(ctx, e);

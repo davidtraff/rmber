@@ -16,7 +16,7 @@ pub trait Key: Sized {
     fn as_slice(&self) -> &[u8];
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct StringKey(String);
 
 impl StringKey {

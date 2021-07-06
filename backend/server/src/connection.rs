@@ -65,7 +65,8 @@ impl Connection {
                         ErrorKind::ConnectionReset
                         | ErrorKind::ConnectionAborted
                         | ErrorKind::ConnectionRefused
-                        | ErrorKind::NotConnected,
+                        | ErrorKind::NotConnected
+                        | ErrorKind::UnexpectedEof,
                     ) => {
                         break;
                     }

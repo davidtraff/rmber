@@ -4,7 +4,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use std::{io::ErrorKind, marker::Unpin};
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Value {
     Boolean(bool),
     Blob(Vec<u8>),

@@ -3,6 +3,8 @@ use std::{thread::sleep, time::Duration};
 use protocol::{Packet, StringKey, Value};
 use tokio::net::TcpStream;
 
+type PCT = Packet<StringKey>;
+
 #[tokio::main]
 async fn main() {
     let mut stream = TcpStream::connect("127.0.0.1:8080").await.unwrap();
@@ -14,21 +16,37 @@ async fn main() {
         }
     ";
 
-    let schema = Packet::<StringKey>::RegisterSchema {
+    let schema = PCT::RegisterSchema {
         schema: String::from(schema),
     };
     schema.write_to(&mut stream).await.unwrap();
 
+    assert_eq!(PCT::Ok {}, PCT::read_from(&mut stream).await.unwrap());
+
+    let sub = PCT::Subscribe {
+        id: StringKey::new("first_namespace/some_value").unwrap(),
+    };
+    sub.write_to(&mut stream).await.unwrap();
+
+    assert_eq!(PCT::Ok {}, PCT::read_from(&mut stream).await.unwrap());
+
     const SIZE: usize = 1000;
     let start = std::time::Instant::now();
     for i in 0..SIZE {
-        let update = Packet::<StringKey>::Update {
+        let update = PCT::Update {
             id: StringKey::new("first_namespace/some_value").unwrap(),
             new_value: Value::I32(i as i32),
         };
         update.write_to(&mut stream).await.unwrap();
 
-        Packet::<StringKey>::read_from(&mut stream).await.unwrap();
+        assert_eq!(PCT::Ok {}, PCT::read_from(&mut stream).await.unwrap());
+        assert_eq!(
+            PCT::Update {
+                id: StringKey::new("first_namespace/some_value").unwrap(),
+                new_value: Value::I32(i as i32),
+            },
+            PCT::read_from(&mut stream).await.unwrap()
+        );
 
         // println!("{:?}", ok);
     }
