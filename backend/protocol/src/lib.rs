@@ -59,6 +59,12 @@ impl Hash for StringKey {
     }
 }
 
+impl std::fmt::Display for StringKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({})", self.as_str())
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RawKey<const LEN: usize>([u8; LEN]);
 

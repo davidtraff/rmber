@@ -1,3 +1,4 @@
+use protocol::Value;
 use protocol::{Packet, StringKey};
 use store::ValueStore;
 use store::rocksdb::DB;
@@ -15,6 +16,7 @@ use crate::connection::{Connection, ConnectionId};
 use crate::event_handlers::{connection_error, handle_new_connection, handle_packet, server_error};
 
 type PacketTx = UnboundedSender<(ConnectionId, Result<Packet<StringKey>, Error>)>;
+type PointTx = UnboundedSender<(StringKey, Value)>;
 type RocksDBStore = ValueStore<DB>;
 
 pub type ConnectionEvent = TcpStream;
@@ -22,7 +24,7 @@ pub type PacketEvent = (ConnectionId, Packet<StringKey>);
 pub type ConnectionErrorEvent = (ConnectionId, Error);
 pub type ServerErrorEvent = Error;
 
-pub type EventContext<'a> = (&'a mut RocksDBStore, &'a mut Vec<Connection>, &'a PacketTx);
+pub type EventContext<'a> = (&'a mut RocksDBStore, &'a mut Vec<Connection>, &'a PacketTx, &'a PointTx);
 
 // pub struct EventContext<'a> {
 //     pub store: &'a mut RocksDBStore,
@@ -36,6 +38,7 @@ enum Event {
     Packet((ConnectionId, Packet<StringKey>)),
     ConnectionError((ConnectionId, Error)),
     ServerError(Error),
+    PointUpdate((StringKey, Value))
 }
 
 pub struct Server {
@@ -54,14 +57,20 @@ impl Server {
     }
 
     pub async fn run(&mut self) {
-        let (tx, rx) = unbounded_channel();
-        let rx = UnboundedReceiverStream::new(rx);
+        let (packet_tx, packet_rx) = unbounded_channel();
+        let packet_rx = UnboundedReceiverStream::new(packet_rx);
+
+        let (point_tx, point_rx) = unbounded_channel();
+        let point_rx = UnboundedReceiverStream::new(point_rx);
 
         let listener = &mut self.listener;
         let new_connections = listener.map(|x| transform_connection(x));
-        let packets = rx.map(|(id, packet)| transform_packet(id, packet));
+        let packets = packet_rx.map(|(id, packet)| transform_packet(id, packet));
+        let points = point_rx.map(|(point, value)| transform_point_update(point, value));
 
-        let mut events = new_connections.merge(packets);
+        let mut events = new_connections
+            .merge(packets)
+            .merge(points);
 
         loop {
             let event = events.next().await;
@@ -69,7 +78,8 @@ impl Server {
             let ctx: EventContext = (
                 &mut self.store,
                 &mut self.connections,
-                &tx
+                &packet_tx,
+                &point_tx,
             );
 
             match event {
@@ -81,6 +91,9 @@ impl Server {
                 }
                 Some(Event::ConnectionError(e)) => {
                     connection_error(ctx, e);
+                }
+                Some(Event::PointUpdate((_, _))) => {
+                    // println!("Point-update stored: {} {:?}", name, value);
                 }
                 Some(Event::ServerError(e)) => {
                     server_error(ctx, e);
@@ -106,4 +119,11 @@ fn transform_packet(
         Ok(packet) => Event::Packet((connection_id, packet)),
         Err(e) => Event::ConnectionError((connection_id, e)),
     }
+}
+
+fn transform_point_update(point: StringKey, value: Value) -> Event {
+    Event::PointUpdate((
+        point,
+        value,
+    ))
 }

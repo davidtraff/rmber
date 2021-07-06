@@ -7,7 +7,7 @@ use crate::{
     server::{ConnectionErrorEvent, ConnectionEvent, EventContext, PacketEvent, ServerErrorEvent},
 };
 
-pub fn handle_new_connection((_, connections, tx): EventContext, connection: ConnectionEvent) {
+pub fn handle_new_connection((_, connections, tx, _): EventContext, connection: ConnectionEvent) {
     let address = match connection.peer_addr() {
         Ok(addr) => addr,
         Err(_) => return,
@@ -27,7 +27,7 @@ pub fn handle_new_connection((_, connections, tx): EventContext, connection: Con
     connections.push(connection);
 }
 
-pub async fn handle_packet((store, connections, tx): EventContext<'_>, (id, packet): PacketEvent) {
+pub async fn handle_packet((store, connections, packet_tx, point_tx): EventContext<'_>, (id, packet): PacketEvent) {
     let connection = connections.iter().find(|c| c.id.eq(&id));
     let connection = match connection {
         Some(c) => c,
@@ -61,8 +61,11 @@ pub async fn handle_packet((store, connections, tx): EventContext<'_>, (id, pack
             id,
             new_value,
         } => {
-            match store.update_point(id, new_value).await {
-                Ok(_) => connection.send_ok().await,
+            match store.update_point(&id, new_value).await {
+                Ok(value) => {
+                    point_tx.send((id, value)).unwrap();
+                    connection.send_ok().await;
+                },
                 Err(e) => connection.send_err(PACKET_UPDATE_ERR, &e.to_string()).await,
             }
         },
@@ -73,17 +76,18 @@ pub async fn handle_packet((store, connections, tx): EventContext<'_>, (id, pack
                 Err(Error::new(ErrorKind::ConnectionAborted, "Client error."))
             );
 
-            tx.send(msg).unwrap();
+            packet_tx.send(msg).unwrap();
         },
         _ => {}
     }
 }
 
-pub fn connection_error((_, connections, _): EventContext, (id, e): ConnectionErrorEvent) {
+pub fn connection_error((_, connections, _, _): EventContext, (id, e): ConnectionErrorEvent) {
     println!("Connection-error {:?}", e);
 
     match e.kind() {
-        ErrorKind::ConnectionReset => {
+        ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted | ErrorKind::ConnectionRefused => {
+            println!("Removing connection {}", &id);
             if let Some(idx) = connections.iter().position(|c| c.id.eq(&id)) {
                 connections.remove(idx);
             }

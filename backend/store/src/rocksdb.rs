@@ -13,7 +13,7 @@ impl<TKey> Store<TKey> for DB
     where
         TKey: Key + 'static
 {
-    async fn store_value(&mut self, key: TKey, value: Value) -> Result<(), Error> {
+    async fn store_value(&mut self, key: &TKey, value: &Value) -> Result<(), Error> {
         let mut data = vec![];
         let mut cursor = Cursor::new(&mut data);
 
@@ -25,7 +25,7 @@ impl<TKey> Store<TKey> for DB
         }
     }
 
-    async fn get_value(&mut self, key: TKey) -> Option<Value> {
+    async fn get_value(&mut self, key: &TKey) -> Option<Value> {
         match self.get_pinned(key.as_slice()) {
             Ok(data) => match data {
                 Some(data) => {
