@@ -1,6 +1,6 @@
 use std::io::{Error, ErrorKind};
 
-use protocol::{Packet, PACKET_SCHEMA_ERR, PACKET_SUBSCRIPTION_ERR, PACKET_UPDATE_ERR};
+use protocol::{PACKET_SCHEMA_ERR, PACKET_SUBSCRIPTION_ERR, PACKET_UPDATE_ERR, Packet, StringKey};
 
 use crate::{
     connection::Connection,
@@ -97,7 +97,8 @@ pub fn connection_error((_, connections, _, _): EventContext, (id, e): Connectio
     match e.kind() {
         ErrorKind::ConnectionReset
         | ErrorKind::ConnectionAborted
-        | ErrorKind::ConnectionRefused => {
+        | ErrorKind::ConnectionRefused
+        | ErrorKind::UnexpectedEof => {
             println!("Removing connection {}", &id);
             if let Some(idx) = connections.iter().position(|c| c.id.eq(&id)) {
                 connections.remove(idx);
@@ -107,8 +108,8 @@ pub fn connection_error((_, connections, _, _): EventContext, (id, e): Connectio
     }
 }
 
-pub async fn point_update(
-    (_, connections, packet_tx, _): EventContext<'_>,
+pub fn point_update(
+    (_, connections, _, _): EventContext<'_>,
     (id, new_value): PointUpdateEvent,
 ) {
     // TODO: If there are a lot of connections, this wouldn't really be performant.
@@ -116,24 +117,22 @@ pub async fn point_update(
         let subset = connection.subscription_set();
 
         if subset.matches(id.as_str()) {
-            // TODO: any way to make this by not cloning (i.e without making Value into holding references.)
-            let packet = Packet::Update {
+            let writer = connection.writer();
+
+            // TODO: How to not clone this here.
+            let packet = Packet::<StringKey>::Update {
                 id: id.clone(),
                 new_value: new_value.clone(),
             };
 
-            match connection.write_packet(packet).await {
-                Ok(_) => {}
-                Err(_) => {
-                    // In this case we emit a disconnect.
-                    let msg = (
-                        connection.id.clone(),
-                        Err(Error::new(ErrorKind::ConnectionAborted, "Client error.")),
-                    );
+            tokio::spawn(async move {
+                let mut writer = writer.lock().await;
 
-                    packet_tx.send(msg).unwrap();
-                }
-            }
+                match packet.write_to(&mut *writer).await {
+                    Ok(_) => {}
+                    Err(_) => {},
+                };
+            });
         }
     }
 }

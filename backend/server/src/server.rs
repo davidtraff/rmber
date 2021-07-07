@@ -88,7 +88,7 @@ impl Server {
                     connection_error(ctx, e);
                 }
                 Some(Event::PointUpdate(e)) => {
-                    point_update(ctx, e).await;
+                    point_update(ctx, e);
                 }
                 Some(Event::ServerError(e)) => {
                     server_error(ctx, e);

@@ -17,7 +17,7 @@ pub struct Connection {
     pub address: SocketAddr,
 
     read: Arc<Mutex<OwnedReadHalf>>,
-    write: RefCell<OwnedWriteHalf>,
+    write: Arc<Mutex<OwnedWriteHalf>>,
     subscriptions: RefCell<QuerySet>,
     raw_schema: RefCell<Option<String>>,
 }
@@ -30,8 +30,8 @@ impl Connection {
             Ok(id) => Ok(Connection {
                 id,
                 read: Arc::new(Mutex::new(read)),
-                // write: Arc::new(Mutex::new(write)),
-                write: RefCell::new(write),
+                write: Arc::new(Mutex::new(write)),
+                // write: RefCell::new(write),
                 address,
                 subscriptions: RefCell::new(QuerySet::empty()),
                 raw_schema: RefCell::new(None),
@@ -57,7 +57,10 @@ impl Connection {
 
                 match tx.send((id, packet)) {
                     Ok(_) => {}
-                    Err(_) => break,
+                    Err(_) => {
+                        println!("Exiting read-loop");
+                        break;
+                    },
                 }
 
                 match error_kind {
@@ -68,20 +71,27 @@ impl Connection {
                         | ErrorKind::NotConnected
                         | ErrorKind::UnexpectedEof,
                     ) => {
+                        println!("Exiting read-loop asd");
                         break;
                     }
                     _ => {}
                 }
             }
+
         });
+
     }
 
     pub async fn write_packet(&self, packet: Packet<StringKey>) -> Result<(), Error> {
-        let mut stream = self.write.borrow_mut();
+        let mut stream = self.write.lock().await;
 
         packet.write_to(&mut *stream).await?;
 
         Ok(())
+    }
+
+    pub fn writer(&self) -> Arc<Mutex<OwnedWriteHalf>> {
+        self.write.clone()
     }
 
     pub async fn send_ok(&self) {

@@ -1,5 +1,3 @@
-use std::{thread::sleep, time::Duration};
-
 use protocol::{Packet, StringKey, Value};
 use tokio::net::TcpStream;
 
@@ -54,6 +52,4 @@ async fn main() {
     let diff = std::time::Instant::now() - start;
 
     println!("{}", diff.as_millis() as f64 / SIZE as f64);
-
-    sleep(Duration::from_millis(100));
 }
